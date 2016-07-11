@@ -37,6 +37,7 @@ set(SRC_M4
 	usb_api_board_info.c
 	usb_api_spiflash.c
 	usb_api_spiflash_spansion.c
+	usb_api_gpio.c
 	"${PATH_GREATFET_FIRMWARE_COMMON}/usb_queue.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/fault_handler.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/rom_iap.c"

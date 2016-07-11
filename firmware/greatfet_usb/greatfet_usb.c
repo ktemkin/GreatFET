@@ -38,6 +38,7 @@
 #include "usb_api_board_info.h"
 #include "usb_api_spiflash.h"
 #include "usb_api_spiflash_spansion.h"
+#include "usb_api_gpio.h"
 #include "usb_bulk_buffer.h"
 
 usb_request_status_t usb_vendor_request_enable_usb1(
@@ -67,15 +68,16 @@ usb_request_status_t usb_vendor_request_led_toggle(
 }
 
 static const usb_request_handler_fn usb0_vendor_request_handler[] = {
-	usb_vendor_request_erase_spiflash,
-	usb_vendor_request_write_spiflash,
-	usb_vendor_request_read_spiflash,
-	usb_vendor_request_read_board_id,
-	usb_vendor_request_read_version_string,
-	usb_vendor_request_read_partid_serialno,
-	usb_vendor_request_enable_usb1,
-	usb_vendor_request_led_toggle,
-	usb_vendor_request_read_spiflash_spansion,
+	usb_vendor_request_erase_spiflash,            // 0
+	usb_vendor_request_write_spiflash,            // 1
+	usb_vendor_request_read_spiflash,             // 2
+	usb_vendor_request_read_board_id,             // 3
+	usb_vendor_request_read_version_string,       // 4
+	usb_vendor_request_read_partid_serialno,      // 5
+	usb_vendor_request_enable_usb1,               // 6
+	usb_vendor_request_led_toggle,                // 7
+	usb_vendor_request_read_spiflash_spansion,    // 8
+	usb_vendor_request_gpio_write                 // 9
 };
 
 static const uint32_t usb0_vendor_request_handler_count =
