@@ -1,3 +1,6 @@
 [submodule "firmware/libopencm3"]
 	path = firmware/libopencm3
 	url = https://github.com/dominicgs/libopencm3
+[submodule "facedancer"]
+	path = facedancer
+	url = https://github.com/ktemkin/Facedancer
