@@ -397,9 +397,15 @@ class GreatDancerApp(FacedancerApp):
         self.device.vendor_request_out(vendor_requests.GREATDANCER_BUS_RESET)
 
 
-    def configured(self, configuration):
+    def _configure_endpoints(self, configuration):
         endpoint_config_command = self._generate_endpoint_config_command(configuration)
-        self.device.vendor_request_out(vendor_requests.GREATDANCER_SET_UP_ENDPOINTS, data=endpoint_config_command)
+
+        if endpoint_config_command:
+            self.device.vendor_request_out(vendor_requests.GREATDANCER_SET_UP_ENDPOINTS, data=endpoint_config_command)
+
+    def configured(self, configuration):
+        self._configure_endpoints(configuration)
+
 
         self.configuration = configuration
         self._handle_transfer_readiness()
