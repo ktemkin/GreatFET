@@ -216,6 +216,7 @@ int main(void) {
 	led_off(LED4);
 
 	init_usb0();
+  init_greatdancer_api();
 	
 	while(true) {
 		if(start_gpio_monitor)

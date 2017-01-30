@@ -32,7 +32,7 @@
 // into fewer vendor requests.
 //
 
-extern const usb_request_handlers_t usb1_request_handlers;
+void init_greatdancer_api(void);
 
 usb_request_status_t usb_vendor_request_greatdancer_connect(
 	usb_endpoint_t* const endpoint, const usb_transfer_stage_t stage);

@@ -68,14 +68,7 @@ void usb1_configuration_changed(usb_device_t* const device)
 	}
 }
 
-void init_greatdancer(void) {
-	usb_set_configuration_changed_cb(usb1_configuration_changed);
-
-	usb_peripheral_reset(&usb1_device);
-
-	// XXX UNDO CHANGE
-	usb_device_init(&usb1_device, true);
-
+void init_greatdancer_api(void) {
   // Initialize all of our queues, so they're ready
   // if the GreatDancer application decides to use them.
 	usb_queue_init(&usb1_endpoint_control_out_queue);
@@ -86,6 +79,15 @@ void init_greatdancer(void) {
 	usb_queue_init(&usb1_endpoint2_in_queue);
 	usb_queue_init(&usb1_endpoint3_out_queue);
 	usb_queue_init(&usb1_endpoint3_in_queue);
+}
+
+static void set_up_greatdancer(void) {
+	usb_set_configuration_changed_cb(usb1_configuration_changed);
+
+	usb_peripheral_reset(&usb1_device);
+
+	// XXX UNDO CHANGE
+	usb_device_init(&usb1_device, true);
 
   // Set up the control endpoint. The application will request setup
   // for all of the non-standard channels on connection.
@@ -127,7 +129,8 @@ usb_request_status_t usb_vendor_request_greatdancer_connect(
 {
 	if (stage == USB_TRANSFER_STAGE_SETUP) {
 
-		init_greatdancer();
+    usb_controller_reset(&usb1_device);
+    set_up_greatdancer();
 
     // Note that we call usb_controller_run and /not/ usb_run.
     // This in particular leaves all interrupts masked in the NVIC
