@@ -100,7 +100,8 @@ usb_request_status_t usb_vendor_request_glitchkit_control_in_start(
 		// and set up the maximum packet size accordingly.
 
 		// TODO: Generalize me!
-		ehci_queue_head_t *qh = set_up_asynchronous_endpoint_queue(&usb_peripherals[1], 0,
+		// FIXME: fix me to not allocate a QH each time
+		ehci_queue_head_t *qh = usb_host_set_up_asynchronous_endpoint_queue(&usb_peripherals[1], NULL, 0,
 				0, USB_SPEED_FULL, true, 64);
 
 		// Send the setup packet...

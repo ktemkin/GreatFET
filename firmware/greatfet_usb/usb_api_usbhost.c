@@ -21,6 +21,7 @@
 #include "usb_host.h"
 #include "usb_queue_host.h"
 #include "usb_registers.h"
+#include "usb_type.h"
 
 // XXX: temporary
 #include "glitchkit.h"
@@ -41,6 +42,9 @@ extern uint32_t total_received_data[NUM_USB1_ENDPOINTS];
 static volatile uint32_t usb_host_read_status  = 0;
 static volatile uint32_t usb_host_write_status = 0;
 
+// Store the currently active Queue Heads for the endpoint APIs.
+static volatile ehci_queue_head_t *endpoint_out_qh[NUM_USB1_ENDPOINTS];
+static volatile ehci_queue_head_t *endpoint_in_qh[NUM_USB1_ENDPOINTS];
 
 /**
  * Enumeration describing each of the possible Index values for GET_STATUS
@@ -74,8 +78,23 @@ typedef struct _endpoint_setup_command_t endpoint_setup_command_t;
  */
 void init_usbhost_api(void)
 {
+
 	usb_host_initialize_storage_pools();
 }
+
+
+volatile ehci_queue_head_t *get_queue_head_for_endpoint(uint32_t endpoint_number)
+{
+		// Grab the existing QH, if we have one-- if this is non-NULL,
+		// we'll update
+		if(endpoint_number & 0x80) {
+			return endpoint_in_qh[endpoint_number & 0x7F];
+		}
+		else {
+			return endpoint_out_qh[endpoint_number];
+		}
+}
+
 
 
 /**
@@ -87,13 +106,14 @@ usb_request_status_t usb_vendor_request_usbhost_connect(
 {
 	if (stage == USB_TRANSFER_STAGE_SETUP) {
 
+		for(int i = 0; i < NUM_USB1_ENDPOINTS; ++i) {
+				endpoint_in_qh[i] = NULL;
+				endpoint_out_qh[i] = NULL;
+		}
+
 		// Set up the device in host mode...
 		usb_controller_reset(&usb_peripherals[1]);
 		usb_host_init(&usb_peripherals[1]);
-
-		// XXX: inject some glitchkit setup for hax
-		glitchkit_enable();
-		glitchkit_enable_trigger_on(GLITCHKIT_USBHOST_FINISH_TD);
 
 		// Provide VBUS to the target, if possible.
 		// TODO: maybe this should be its own vendor request
@@ -212,7 +232,22 @@ usb_request_status_t usb_vendor_request_usbhost_set_up_endpoint(
 
 	} else if(stage == USB_TRANSFER_STAGE_DATA) {
 
+		//
+		// FIXME: clean up these magic numbers
+		// FIXME: always clear out the QH array on init
+		//
+
 		// ... and process it.
+		uint8_t endpoint_number = command.endpoint_number & 0x7F;
+		volatile ehci_queue_head_t *qh;
+
+		if(endpoint_number >= NUM_USB1_ENDPOINTS) {
+			return USB_REQUEST_STATUS_STALL;
+		}
+
+		// Grab the existing QH, if we have one-- if this is non-NULL,
+		// we'll update the QH instead of allocating a new one.
+		qh = get_queue_head_for_endpoint(endpoint_number);
 
 		// Acknowledge early, as this can take a bit. :)
 		usb_transfer_schedule_ack(endpoint->in);
@@ -220,12 +255,17 @@ usb_request_status_t usb_vendor_request_usbhost_set_up_endpoint(
 		// TODO: Support schedules other than asynchronous.
 		// TODO: Use an endpoint API, rather than the queue set up directly.
 
-		ehci_queue_head_t *qh = set_up_asynchronous_endpoint_queue(&usb_peripherals[1], command.device_address,
-				command.endpoint_number, command.endpoint_speed, command.is_control_endpoint,
-				command.max_packet_size);
+		qh = usb_host_set_up_asynchronous_endpoint_queue(qh, &usb_peripherals[1],
+				command.device_address, endpoint_number, command.endpoint_speed,
+				command.is_control_endpoint, command.max_packet_size);
 
-		// FIXME: this is temporary placeholder code
-		usb_peripherals[1].control_endpoint_queue = qh;
+		// Store the configuration to the appropriate array.
+		if(command.endpoint_number & 0x80) {
+			endpoint_in_qh[endpoint_number] = qh;
+		} else {
+			endpoint_out_qh[endpoint_number] = qh;
+		}
+
 
 	}
 	return USB_REQUEST_STATUS_OK;
@@ -279,16 +319,14 @@ usb_request_status_t usb_vendor_request_usbhost_send_on_endpoint(
 	int endpoint_number = endpoint->setup.index;
 	int pid_token       = endpoint->setup.value;
 
-	// FIXME: Grab the endpoint queue for the given endpoint, rather than always
-	// assuming EP0.
-	ehci_queue_head_t *endpoint_queue = usb_peripherals[1].control_endpoint_queue;
+	// If this isn't a valid endpoint, stall the request.
+	if(endpoint_number >= NUM_USB1_ENDPOINTS) {
+			return USB_REQUEST_STATUS_STALL;
+	}
+
+	ehci_queue_head_t *endpoint_queue = get_queue_head_for_endpoint(endpoint_number);
 
 	if (stage == USB_TRANSFER_STAGE_SETUP) {
-
-		// If this isn't a valid endpoint, stall the request.
-		if(endpoint_number >= NUM_USB1_ENDPOINTS) {
-				return USB_REQUEST_STATUS_STALL;
-		}
 
 		// If we're requesting a ZLP issue it immediately.
 		if(endpoint->setup.length == 0) {
@@ -380,7 +418,12 @@ usb_request_status_t usb_vendor_request_usbhost_start_nonblocking_read(
 
 		// FIXME: Grab the endpoint queue for the given endpoint, rather than always
 		// assuming EP0.
-		ehci_queue_head_t *endpoint_queue = usb_peripherals[1].control_endpoint_queue;
+		ehci_queue_head_t *endpoint_queue = get_queue_head_for_endpoint(endpoint_number);
+
+		// If we don't have a endpoint queue set up for this endpoint, fail out.
+		if(!endpoint_queue) {
+			return USB_REQUEST_STATUS_STALL;
+		}
 
 		// ... and start a nonblocking transfer.
 		usb_host_transfer_schedule(

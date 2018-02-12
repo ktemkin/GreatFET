@@ -11,6 +11,7 @@
 #include "usb_host.h"
 #include "usb_queue_host.h"
 #include "usb_registers.h"
+#include "usb_type.h"
 
 #include "greatfet_core.h"
 #include "glitchkit.h"
@@ -63,6 +64,48 @@ void usb_host_initialize_storage_pools(void)
 	queue_head_pool[USB_HOST_MAX_QUEUE_HEADS - 1].horizontal.ptr = TERMINATING_LINK;
 	transfer_pool[USB_HOST_MAX_QUEUE_HEADS - 1].horizontal.ptr = TERMINATING_LINK;
 }
+
+
+
+/**
+ * Determines the address of the next link in an EHCI-style list.
+ *
+ * @return The link, or NULL if there is no link following this one.
+ */
+static ehci_link_t *next_link(ehci_link_t *link)
+{
+	uint32_t raw_pointer;
+
+	// If this is a terminating link, return NULL,
+	// which has the same semantic meaning as our terminator. :)
+	if(link->terminate) {
+			return NULL;
+	}
+
+	// Get a manipulable reference to the next QH...
+	raw_pointer = (uintptr_t)link->link;
+
+	// ... mask away the non-pointer bits....
+	raw_pointer &= ~0b111;
+	//raw_pointer &= ~0b11111; // <-- why was this ever like this?
+
+	// ... and convert it back into a pointer.
+	return (ehci_link_t *)raw_pointer;
+}
+
+
+
+/**
+ * Determines the address of the next link in an EHCI-style list.
+ *
+ * @return The link, or NULL if there is no link following this one.
+ */
+static ehci_queue_head_t *next_qh(ehci_queue_head_t *qh)
+{
+	return (ehci_queue_head_t *)next_link((ehci_link_t *)qh);
+}
+
+
 
 /**
  * Core allocator for the freelist/pool allocator. Simply grabs the first element
@@ -121,6 +164,7 @@ ehci_queue_head_t * usb_host_allocate_queue_head(void)
 
 /**
  * Frees a queue head, returning it to the pool of available queue heads.
+ * This should _not_ be used on an active queue!
  *
  * @param to_free The queue head to be freed.
  */
@@ -224,11 +268,60 @@ static void usb_host_initialize_queue_head(ehci_queue_head_t *qh,
 
 
 /**
+ * Returns true iff the given queue head is currently in use.
+ *
+ * FIXME: support more than the asynch queue
+ *
+ * @param host The USB host whose asynchronous queue is to be searched.
+ * @param needle The queue head to search for.
+ */
+static ehci_queue_head_t *usb_host_find_endpoint_queue_predecessor(
+	ehci_queue_head_t *head, ehci_queue_head_t *target)
+{
+	ehci_queue_head_t *qh;
+
+	// Move through the queue until we find the node's predecessor, or run out of nodes.
+	for(qh = head; next_qh(qh) != head; qh = next_qh(qh)) {
+
+		// If this qh points to ours, this is our predecessor.
+		if(qh->horizontal.link == (uint32_t)target) {
+				return qh;
+		}
+
+		// If our list was broken, we can't move forward.
+		// This implies an error on in the linked list Return NULL.
+		if(qh->horizontal.terminate || !qh->horizontal.ptr) {
+				return NULL;
+		}
+	}
+
+	// If we didn't find a node, the node's not in the list.
+	return NULL;
+}
+
+
+/**
+ * Returns true iff the given queue head is currently in use.
+ *
+ * FIXME: support more than the asynch queue
+ *
+ * @param host The USB host whose asynchronous queue is to be searched.
+ * @param qh The queue head to search for.
+ */
+bool usb_host_endpoint_queue_in_use(usb_peripheral_t *host, ehci_queue_head_t *qh)
+{
+	return usb_host_find_endpoint_queue_predecessor(&host->async_queue_head, qh);
+}
+
+
+
+/**
  * Sets up an endpoint for use in issuing USB transactions. This can be used
  * for any endpoint on the asynchronous queue (e.g. not interrupt or iso).
  *
  * Intended to be used internally to the endpoint API.
  *
+ * @param qh The Queue head to set up, or NULL to allocate one.
  * @param device_address The address of the downstream device.
  * @param endpoint_number The endpoint number of the endpoint being configurd,
  *		_not_ including the direction bit.
@@ -240,25 +333,34 @@ static void usb_host_initialize_queue_head(ehci_queue_head_t *qh,
  *
  * @return The queue set up for the given endpoint, or NULL if we couldn't set up a queue.
  */
-ehci_queue_head_t * set_up_asynchronous_endpoint_queue(usb_peripheral_t *host, uint8_t device_address,
+ehci_queue_head_t * usb_host_set_up_asynchronous_endpoint_queue(
+		usb_peripheral_t *host, volatile ehci_queue_head_t *qh, uint8_t device_address,
 		uint8_t endpoint_number, usb_speed_t endpoint_speed,
 		bool is_control_endpoint, uint16_t max_packet_size)
 {
-	ehci_queue_head_t *qh = usb_host_allocate_queue_head();
+	// If we weren't passed a QH, allocate one.
+	if(!qh)
+		qh = usb_host_allocate_queue_head();
 
+	// If we still don't have a QH, fail out.
 	if(!qh)
 		return NULL;
+
+	// Ensure we're not modifying any queues while the asynchronous queue is
+	// in use. Once this returns, we're safe to touch things.
+	usb_host_disable_asynchronous_schedule(host);
 
 	// Set up the Queue Head object for use...
 	usb_host_initialize_queue_head(qh, device_address, endpoint_number,
 			endpoint_speed, is_control_endpoint, max_packet_size);
 
-	// Add the new queue head to the asynchronous queue, ensuring the schedule
-	// is disabled as we're modifying its innards.
-	usb_host_disable_asynchronous_schedule(host);
-	qh->horizontal.link = host->async_queue_head.horizontal.link;
-	host->async_queue_head.horizontal.ptr = &qh->horizontal;
-	host->async_queue_head.horizontal.type = DESCRIPTOR_QH;
+	// If the Queue Head isn't already in use, append it to the endpoint queue.
+	if(!usb_host_endpoint_queue_in_use(host, qh)) {
+		qh->horizontal.link = host->async_queue_head.horizontal.link;
+		host->async_queue_head.horizontal.ptr = &qh->horizontal;
+		host->async_queue_head.horizontal.type = DESCRIPTOR_QH;
+	}
+
 	usb_host_enable_asynchronous_schedule(host);
 
 	return qh;
@@ -309,9 +411,6 @@ int usb_host_transfer_schedule(
 	}
 
 	// Mark any relevant glitchkit events as having occurred.
-	//glitchkit_notify_event_deferred(GLITCHKIT_USBHOST_START_TD);
-	//glitchkit_notify_event_deferred(glitchkit_events_for_pid_start[pid_code]);
-
 	glitchkit_notify_event(GLITCHKIT_USBHOST_START_TD);
 	glitchkit_notify_event(glitchkit_events_for_pid_start[pid_code]);
 
@@ -365,31 +464,6 @@ int usb_host_transfer_schedule(
 }
 
 
-/**
- * Determines the address of the next link in an EHCI-style list.
- *
- * @return The link, or NULL if there is no link following this one.
- */
-static ehci_link_t *next_link(ehci_link_t *link)
-{
-	uint32_t raw_pointer;
-
-	// If this is a terminating link, return NULL,
-	// which has the same semantic meaning as our terminator. :)
-	if(link->terminate) {
-			return NULL;
-	}
-
-	// Get a manipulable reference to the next QH...
-	raw_pointer = (uintptr_t)link->link;
-
-	// ... mask away the non-pointer bits....
-	raw_pointer &= ~0b11111;
-
-	// ... and convert it back into a pointer.
-	return (ehci_link_t *)raw_pointer;
-}
-
 
 /**
  *
@@ -442,7 +516,7 @@ void usb_host_handle_asynchronous_transfer_complete(usb_peripheral_t *host)
 
 			// ... and free the transfer.
 			usb_host_free_transfer(transfer);
-		} 
+		}
 		
 		// Otherwise, continue iterating.
 		else {

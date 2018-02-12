@@ -93,6 +93,7 @@ void usb_host_free_transfer(ehci_transfer_t *to_free);
  * Intended to be used internally to the endpoint API, but accessible for
  * low-level access if e.g. Host APIs require.
  *
+ * @param 
  * @param device_address The address of the downstream device.
  * @param endpoint_number The endpoint number of the endpoint being configurd,
  *		_not_ including the direction bit.
@@ -102,7 +103,8 @@ void usb_host_free_transfer(ehci_transfer_t *to_free);
  * @param max_packet_size The maximum packet size transmissable on the endpoint;
  *		up to 1024.
  */
-ehci_queue_head_t * set_up_asynchronous_endpoint_queue(usb_peripheral_t *host, uint8_t device_address,
+ehci_queue_head_t * usb_host_set_up_asynchronous_endpoint_queue(
+		usb_peripheral_t *host, volatile ehci_queue_head_t *qh, uint8_t device_address,
 		uint8_t endpoint_number, usb_speed_t endpoint_speed,
 		bool is_control_endpoint, uint16_t max_packet_size);
 
