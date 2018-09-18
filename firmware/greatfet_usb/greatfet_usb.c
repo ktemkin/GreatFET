@@ -10,7 +10,8 @@
 
 #include <greatfet_core.h>
 
-#include "usb.h"
+#include "drivers/usb/lpc43xx/usb.h"
+
 #include "usb_request_handlers.h"
 #include "usb_api_sdir.h"
 #include "usb_api_usbhost.h"

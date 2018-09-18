@@ -13,10 +13,12 @@ set(SRC_M4
 	greatfet_usb.c
 	usb_request_handlers.c
 	usb_bulk_buffer.c
-	"${PATH_GREATFET_FIRMWARE_COMMON}/usb.c"
-	"${PATH_GREATFET_FIRMWARE_COMMON}/usb_host.c"
-	"${PATH_GREATFET_FIRMWARE_COMMON}/usb_request.c"
-	"${PATH_GREATFET_FIRMWARE_COMMON}/usb_standard_request.c"
+    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb.c"
+	"${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_host.c"
+	"${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_request.c"
+	"${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_standard_request.c"
+	"${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_queue.c"
+	"${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_queue_host.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/gpdma.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/gpio_dma.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/gpio_scu.c"
@@ -44,8 +46,6 @@ set(SRC_M4
 	usb_api_debug.c
 	sgpio_isr.c
 	"${PATH_GREATFET_FIRMWARE_COMMON}/glitchkit.c"
-	"${PATH_GREATFET_FIRMWARE_COMMON}/usb_queue.c"
-	"${PATH_GREATFET_FIRMWARE_COMMON}/usb_queue_host.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/fault_handler.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/rom_iap.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/spi_bus.c"

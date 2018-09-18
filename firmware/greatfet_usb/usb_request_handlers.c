@@ -2,7 +2,7 @@
  * This file is part of GreatFET
  */
 
-#include "usb_standard_request.h"
+#include <drivers/usb/lpc43xx/usb_standard_request.h>
 
 #include "usb_api_board.h"
 #include "usb_api_spiflash.h"

@@ -6,7 +6,7 @@
 
 #include <greatfet_core.h>
 #include <rom_iap.h>
-#include <usb_queue.h>
+#include <drivers/usb/lpc43xx/usb_queue.h>
 #include <libopencm3/lpc43xx/wwdt.h>
 
 #include <stddef.h>
