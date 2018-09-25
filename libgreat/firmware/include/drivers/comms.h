@@ -5,10 +5,77 @@
  * the standard communications protocol.
  */
 
+
+#ifndef __LIBGREAT_COMMS_H__
+#define __LIBGREAT_COMMS_H__
+
+#include <stdbool.h>
+#include <toolchain.h>
+
 /**
- * Structure describing the various operations that can be performed by a 
+ * Structure composing the objects for a given
+ */
+struct command_transaction {
+
+	/**
+	 * The class number for the given transaciton.
+	 */
+	uint32_t class_number;
+
+	/**
+	 * The verb number for the given transaction.
+	 */
+	uint32_t verb;
+
+	/*
+	 * Pointer to a byte buffer that provides the command's input,
+	 * or NULL if no input is being provided.
+	 */
+	void *data_in;
+
+	/*
+	 * The length of the data provided in the data_in buffer.
+	 * Must be 0 if data_in is null.
+	 */
+	uint32_t data_in_length;
+
+	/*
+	 * Pointer to a byte buffer that accepts the command's output.
+	 * or NULL if no output is being provided.
+	 */
+    void *data_out;
+
+	/*
+	 * The maximum response length that the device is willing to accept.
+	 * This must be 0 if data_out is null.
+	 */
+	uint32_t data_out_max_length;
+
+	/*
+	 * Out argument that accepts the amount of data to be returned
+	 * by the given command. Must be <= data_out_max_length.
+	 */
+	uint32_t data_out_length;
+};
+
+
+
+/**
+ * Callback types for commands registered by communications backends.
+ *
+ * @param trans The transcation data for the given transaction.
+ *	See the struct definition for each field.
+ *
+ * @return 0 if the operation went successfully, or an error code on failure.
+ *      This will be converted to a protocol-specific response, and the error
+ *      code may not be conveyed.
+ */
+typedef int (*command_handler_function)(struct command_transaction *trans);
+
+/**
+ * Structure describing the various operations that can be performed by a
  * (conceptual) pipe.
- */ 
+ */
 struct comms_pipe_ops {
 
     /**
@@ -43,75 +110,87 @@ struct comms_pipe_ops {
 
 
 /**
+ * Data structure that describes a standard communication verb.
+ */
+struct comms_verb {
+
+	/* The number of the verb to be accepted. */
+	uint32_t verb_number;
+
+	/* The command handler -- must be non-NULL for
+	 * any non-sentinel (termiatnor) verb. */
+	command_handler_function handler;
+
+};
+
+
+/**
  * Data structure that describes a libgreat class.
  */
-struct comms_class_descriptor {
-    
+struct comms_class {
+
     /**
      * The number for the provided class. These should be reserved
      * on the relevant project's wiki.
      */
     uint32_t class_number;
 
+	/**
+	 * Printable name for the class.
+	 * Used mostly for debug output.
+	 */
+	char *name;
+
+	/**
+	 * A function that will accept any commands issued to this class.
+	 * If this is NULL, the command_verb list will be used to automatically
+	 * select a verb function.
+	 */
+	command_handler_function command_handler;
+
+
+	/**
+	 * Pointer to an array of verb objects,
+	 * terminated by a verb with a handler of NULL.
+	 *
+	 * Used only if the command_handler is NULL.
+	 */
+	struct comms_verb *command_verbs;
+
+
+	/**
+	 *  Forms a singly-linked list of comm classes.
+	 *
+	 *	Pointer to the the next communciations class in the list,
+	 *	or NULL if no classes remain.
+	 */
+	struct comms_class *next;
+
+	/** TODO: pipe objects */
 };
 
-
-/**
- * Object describing a communications class.
- */
-struct comms_class {
-
-};
 
 /**
  * Object describing a communications pipe.
  */
 struct comms_pipe {
-    
 
 };
 
-
-/**
- * Callback types for commands registered by communications backends.
- *
- * @param verb -- The verb number for the given class. Allows each class
- *      to provide more than one function, but with logical grouping.
- * @param data_in -- Pointer to a byte buffer that provides the command's
- *      input, or NULL if no input is being provided.
- * @param data_in_length -- The length of the data provided in the data_in
- *      buffer. Must be 0 if data_in is null.
- * @param data_out -- Pointer to a byte buffer that will recieve the command's
- *      output, or NULL if no output is accepted.
- * @param data_out_max_length -- The maximum response length that the device is
- *      willing to accept. This must be 0 if data_out is null.
- * @param data_out_length -- Out argument that accepts the amount of data
- *      to be returned by the given command. Must be <= data_out_max_length.
- *
- * @return 0 if the operation went successfully, or an error code on failure.
- *      This will be converted to a protocol-specific response, and the error
- *      code may not be conveyed.
- */
-typedef int (*command_handler)(uint32_t verb, void *data_in, uint32_t data_in_length,
-        void *data_out, uint32_t data_out_max_length, uint32_t *data_out_length);
 
 
 /**
  * Registers a given class for use with libgreat; which implicitly provides it
  * with an ability to handle commands.
  *
- * @param class_descriptor A descriptor describing the class to be created.
- * @param command_callback A callback function used to execute commands for
- *      the class; or NULL if the class proides pipes only.
- *
- * @return a comms_class object on success; or NULL on failure
+ * @param comms_class The comms class to be registered. This object will continue
+ *	to be held indefinition, so it must be permanently allocated.
  */
-struct comms_class *comms_register_class(struct comms_class_descriptor class_descriptor, 
-        command_handler command_callback);
+void comms_register_class(struct comms_class *comms_class);
 
 
 /**
- * Registers a pipe to be provided for a given class, which allows 
+ * Registers a pipe to be provided for a given class, which allows
  * bulk bidirectional communications.
  *
  * @param class_number -- The number for the class for which the pipe is
@@ -122,7 +201,7 @@ struct comms_class *comms_register_class(struct comms_class_descriptor class_des
  *
  * @returns a comms_pipe object on success; or NULL on failure
  */
-struct comms_pipe *comms_register_pipe(struct comms_class *owning_class, 
+struct comms_pipe *comms_register_pipe(struct comms_class *owning_class,
         uint32_t flags, struct comms_pipe_ops ops);
 
 
@@ -130,12 +209,34 @@ struct comms_pipe *comms_register_pipe(struct comms_class *owning_class,
  * Transmits data on a given communications pipe.
  *
  * @param pipe The pipe on which to transmit.
- * @param 
- */ 
+ * @param data Buffer storing the data to be transmitted.
+ * @param length The length of the data to be transmitted.
+ */
 int comms_send_on_pipe(struct comms_pipe *pipe, void *data, uint32_t length);
 
 
 /**
  * @return True iff the given comms pipe is ready for data transmission.
- */ 
+ */
 bool comms_pipe_ready(struct comms_pipe *pipe);
+
+
+/**
+ * Macros that allow us to avoid boilerplate declarations.
+ */
+
+/* Registers a given comms_class_t for use. */
+#define COMMS_PROVIDE_CLASS(defined_name) \
+	void defined_name##__auto_initializer(void) { comms_register_class(&defined_name); }; \
+	CALL_ON_INIT(defined_name##__auto_initializer)
+
+/* Defines a comms_class_t and registers it for use. */
+#define COMMS_DEFINE_SIMPLE_CLASS(defined_name, number, string, verbs) \
+	struct comms_class defined_name##__object_ = { \
+		.name = string, \
+		.class_number = number, \
+		.command_verbs = verbs, \
+	}; \
+	COMMS_PROVIDE_CLASS(defined_name##__object_)
+
+#endif

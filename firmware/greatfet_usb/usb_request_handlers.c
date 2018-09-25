@@ -3,6 +3,7 @@
  */
 
 #include <drivers/usb/lpc43xx/usb_standard_request.h>
+#include <drivers/usb/comms_backend.h>
 
 #include "usb_api_board.h"
 #include "usb_api_spiflash.h"
@@ -99,16 +100,47 @@ static const usb_request_handler_fn usb0_vendor_request_handler[] = {
 	//usb_vendor_request_msp430_jtag
 
 	usb_vendor_request_dac_set,
-	usb_vendor_request_read_dmesg
+	//usb_vendor_request_read_dmesg
 };
 
 static const uint32_t usb0_vendor_request_handler_count =
 	sizeof(usb0_vendor_request_handler) / sizeof(usb0_vendor_request_handler[0]);
 
+
+/**
+ * @returns true iff the given setup packet describes a
+ *	USB-encapsulated LibGreat command.
+ */
+static bool _is_libgreat_command(usb_setup_t *setup_packet)
+{
+	uint8_t request_recipient = setup_packet->request_type
+		& USB_SETUP_REQUEST_RECIPIENT_mask;
+
+	// If this isn't to an endpoint, it's not to us.
+	if (request_recipient != USB_SETUP_REQUEST_RECIPIENT_ENDPOINT)
+		return false;
+
+	// If this request isn't to endpoint zero, it's not for us.
+	if (setup_packet->index != 0)
+		return false;
+
+	// If this isn't our request number, it's not to us.
+	if (setup_packet->request != LIBGREAT_USB_COMMAND_REQUEST)
+		return false;
+
+	// If all of these match, this vendor request is for us!
+	return true;
+}
+
+
 usb_request_status_t usb0_vendor_request(
 	usb_endpoint_t* const endpoint,
 	const usb_transfer_stage_t stage) {
 	usb_request_status_t status = USB_REQUEST_STATUS_STALL;
+
+	if (_is_libgreat_command(&endpoint->setup)) {
+		return libgreat_comms_vendor_request_handler(endpoint, stage);
+	}
 
 	if( endpoint->setup.request < usb0_vendor_request_handler_count ) {
 		usb_request_handler_fn handler = usb0_vendor_request_handler[endpoint->setup.request];

@@ -407,6 +407,78 @@ class GreatFETBoard(object):
             index=index, length_or_data=data, timeout=timeout)
 
 
+    @staticmethod
+    def _build_command_prelude(class_number, verb):
+        """Builds a libgreat command prelude, which identifies the command
+        being executed to libgreat.
+        """
+        import struct
+        return struct.pack("<II", class_number, verb)
+
+
+    def execute_command(self, class_number, verb, data=None, timeout=1000,
+            encoding=None, max_response_length=4096):
+        """Executes a GreatFET command.
+
+        Args:
+            class_number -- The class number for the given command.
+                See the GreatFET wiki for a list of class numbers.
+            verb -- The verb number for the given command.
+                See the GreatFET wiki for the given class.
+            data -- Data to be transmitted to the GreatFET.
+            timeout -- Maximum command execution time, in ms.
+            encoding -- If specified, the response data will attempt to be
+                decoded in the provided format.
+            max_response_length -- If less than 4096, this parameter will
+                cut off the provided response at the given length.
+
+        Returns any data recieved in response.
+        """
+
+        # FIXME: these should be moved to a backend module in the libgreat
+        # host library
+        LIBGREAT_REQUEST_NUMBER = 0x65
+        LIBGREAT_MAX_COMMAND_SIZE = 4096
+
+        # Build the command header, which identifies the command to be executed.
+        prelude = self._build_command_prelude(class_number, verb)
+
+        # If we have data, build it into our request.
+        if data:
+            to_send = prelude + data
+
+            if len(to_send) > LIBGREAT_MAX_COMMAND_SIZE:
+                raise ArgumentError("Command payload is too long!")
+
+        # Otherwise, just send the prelude.
+        else:
+            to_send = prelude
+
+        # Send the command (including prelude) to the device...
+        # TODO: upgrade this to be able to not block?
+        self.device.ctrl_transfer(
+            usb.ENDPOINT_OUT | usb.TYPE_VENDOR | usb.RECIP_ENDPOINT,
+            LIBGREAT_REQUEST_NUMBER, 0, 0, to_send, timeout)
+
+        # Truncate our maximum, if necessary.
+        if max_response_length > 4096:
+            max_response_length = LIBGREAT_MAX_COMMAND_SIZE
+
+        # ... and read any response the device has prepared for us.
+        # TODO: use our own timeout, rather than the command timeout, to
+        # avoid doubling the overall timeout
+        response = self.device.ctrl_transfer(
+            usb.ENDPOINT_IN | usb.TYPE_VENDOR | usb.RECIP_ENDPOINT,
+            LIBGREAT_REQUEST_NUMBER, 0, 0, max_response_length, timeout)
+
+        # If we were passed an encoding, attempt to decode the response data.
+        if encoding and response:
+            response = response.tostring().decode(encoding)
+
+        # Return the device's response.
+        return response
+
+
     def read_debug_ring(self, max_length=2048, clear=False, encoding='latin1'):
         """ Requests the GreatFET's debug ring.
 
@@ -415,8 +487,16 @@ class GreatFETBoard(object):
             clear -- True iff the dmesg buffer should be cleared after the request.
         """
 
-        return self.vendor_request_in_string(vendor_requests.READ_DMESG,
-                length=max_length, value= 1 if clear else 0, encoding=encoding)
+        CLASS_DEBUG = 0x1234
+        CLASS_DEBUG_VERB_READ = 0
+        CLASS_DEBUG_VERB_CLEAR = 1
+
+        response = self.execute_command(0x1234, 0, encoding='latin1')
+
+        if clear:
+            self.execute_command(0x1234, 1)
+
+        return response
 
 
     def _populate_leds(self, led_count):

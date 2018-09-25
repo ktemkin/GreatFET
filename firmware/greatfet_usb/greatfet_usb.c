@@ -5,6 +5,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+/* FIXME: only include this from libgreat */
+/* FIXME: replace me with a better name */
+#include <toolchain.h>
+
 #include <libopencm3/cm3/vector.h>
 #include <libopencm3/lpc43xx/m4/nvic.h>
 
@@ -82,9 +86,9 @@ void init_usb0(void) {
 }
 
 
+
 int main(void) {
 	debug_init();
-	debug_ring_write_string("GreatFET started!\n");
 
 	cpu_clock_init();
 	cpu_clock_pll1_max_speed();

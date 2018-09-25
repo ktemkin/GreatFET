@@ -92,9 +92,14 @@ include_directories("${PATH_GREATFET_FIRMWARE_COMMON}")
 # FIXME: pull out into libgreat, probably?
 include_directories("${PATH_LIBGREAT_FIRMWARE}/include")
 
+
 macro(DeclareTargets)
 	SET(SRC_M4
 		${SRC_M4}
+
+		#fixme: pull into libgreat
+		${PATH_LIBGREAT_FIRMWARE}/platform/lpc43xx/crt0.c
+
 		${PATH_GREATFET_FIRMWARE_COMMON}/greatfet_core.c
 		${PATH_GREATFET_FIRMWARE_COMMON}/spiflash_target.c
 		${PATH_GREATFET_FIRMWARE_COMMON}/spiflash.c
