@@ -239,4 +239,42 @@ bool comms_pipe_ready(struct comms_pipe *pipe);
 	}; \
 	COMMS_PROVIDE_CLASS(defined_name##__object_)
 
+
+/**
+ * Simple inline functions that help us to return simple things.
+ */ 
+#define COMMS_DECLARE_RESPONSE_HANDLER(type) \
+	void *comms_respond_##type(struct command_transaction *trans, type response); \
+	void *comms_response_add_##type(struct command_transaction *trans, void **data_out, type response)
+
+#define COMMS_DECLARE_ARGUMENT_HANDLER(type) \
+	type comms_argument_parse_##type(struct command_transaction *trans);
+
+/**
+ * Convenience functions -- declared in util.h
+ */
+COMMS_DECLARE_RESPONSE_HANDLER(uint8_t);
+COMMS_DECLARE_RESPONSE_HANDLER(uint16_t);
+COMMS_DECLARE_RESPONSE_HANDLER(uint32_t);
+COMMS_DECLARE_RESPONSE_HANDLER(int8_t);
+COMMS_DECLARE_RESPONSE_HANDLER(int16_t);
+COMMS_DECLARE_RESPONSE_HANDLER(int32_t);
+COMMS_DECLARE_ARGUMENT_HANDLER(uint8_t);
+COMMS_DECLARE_ARGUMENT_HANDLER(uint16_t);
+COMMS_DECLARE_ARGUMENT_HANDLER(uint32_t);
+COMMS_DECLARE_ARGUMENT_HANDLER(int8_t);
+COMMS_DECLARE_ARGUMENT_HANDLER(int16_t);
+COMMS_DECLARE_ARGUMENT_HANDLER(int32_t);
+void *comms_respond_string(struct command_transaction *trans, char *response);
+
+/**
+ * Convenience function that starts an (empty) response,
+ * for later use with the comms_response_add_N functions.
+ *
+ * @param trans The transaction to respond to.
+ * @return A pointer to be passed by reference as the second
+ *	argument into future add_ functions.
+ */
+void *comms_start_response(struct command_transaction *trans);
+
 #endif

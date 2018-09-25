@@ -21,6 +21,7 @@ set(SRC_M4
 	"${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_queue_host.c"
 	"${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/comms_backend.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/comms/comms_class.c"
+    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/comms/utils.c"
 
 	"${PATH_GREATFET_FIRMWARE_COMMON}/gpdma.c"
 	"${PATH_GREATFET_FIRMWARE_COMMON}/gpio_dma.c"
