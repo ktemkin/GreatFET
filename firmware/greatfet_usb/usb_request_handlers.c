@@ -5,7 +5,6 @@
 #include <drivers/usb/lpc43xx/usb_standard_request.h>
 #include <drivers/usb/comms_backend.h>
 
-#include "usb_api_board.h"
 #include "usb_api_spiflash.h"
 #include "usb_api_adc.h"
 #include "usb_api_dac.h"
@@ -23,16 +22,15 @@
 #include "usb_api_glitchkit_usb.h"
 #include "usb_api_DS18B20.h"
 #include "usb_api_msp430.h"
-#include "usb_api_debug.h"
 
 static const usb_request_handler_fn usb0_vendor_request_handler[] = {
 	usb_vendor_request_spiflash_init,
 	usb_vendor_request_spiflash_write,
 	usb_vendor_request_spiflash_read,
 	usb_vendor_request_spiflash_erase,
-	usb_vendor_request_read_board_id,
-	usb_vendor_request_read_version_string,
-	usb_vendor_request_read_partid_serialno,
+	NULL, // usb_vendor_request_read_board_id,
+	NULL, //usb_vendor_request_read_version_string,
+	NULL, //usb_vendor_request_read_partid_serialno,
 	NULL,
 	usb_vendor_request_set_leds,
 	usb_vendor_request_gpio_register,
@@ -47,7 +45,7 @@ static const usb_request_handler_fn usb0_vendor_request_handler[] = {
 	usb_vendor_request_i2c_response,
 	usb_vendor_request_logic_analyzer_start,
 	usb_vendor_request_logic_analyzer_stop,
-	usb_vendor_request_reset,
+	NULL, //usb_vendor_request_reset,
 	usb_vendor_request_adc_init,
 	usb_vendor_request_adc_read, // ADC read
 	NULL, // ADC stream
@@ -91,7 +89,7 @@ static const usb_request_handler_fn usb0_vendor_request_handler[] = {
 	usb_vendor_request_usbhost_start_nonblocking_read,
 	usb_vendor_request_usbhost_finish_nonblocking_read,
 	usb_vendor_request_usbhost_get_nonblocking_data_length,
-	usb_vendor_request_super_hacky,
+	//usb_vendor_request_super_hacky,
 
 	// DS18B20 over 1-Wire bus
 	usb_vendor_request_DS18B20_read,

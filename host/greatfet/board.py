@@ -254,8 +254,12 @@ class GreatFETBoard(object):
     def board_id(self):
         """Reads the board ID number for the GreatFET device."""
 
+        # FIXME: abstract
+        CLASS_CORE = 0
+        CLASS_CORE_VERB_READ_BOARD_ID = 0
+
         # Query the board for its ID number.
-        response = self.vendor_request_in(vendor_requests.READ_BOARD_ID, length=1)
+        response = self.execute_command(CLASS_CORE, CLASS_CORE_VERB_READ_BOARD_ID)
         return response[0]
 
 
@@ -267,16 +271,24 @@ class GreatFETBoard(object):
     def firmware_version(self):
         """Reads the board's firmware version."""
 
+        # FIXME: abstract
+        CLASS_CORE = 0
+        CLASS_CORE_VERB_READ_VERSION_STRING = 1
+
         # Query the board for its firmware version, and convert that to a string.
-        return self.vendor_request_in_string(vendor_requests.READ_VERSION_STRING, length=255)
+        try:
+            return self.execute_command(CLASS_CORE, CLASS_CORE_VERB_READ_VERSION_STRING, encoding='utf-8')
+        except Exception as e:
+            print(self.execute_command(CLASS_CORE, CLASS_CORE_VERB_READ_VERSION_STRING))
+            raise 
 
 
     def serial_number(self, as_hex_string=True):
         """Reads the board's unique serial number."""
-        result = self.vendor_request_in(vendor_requests.READ_PARTID_SERIALNO, length=24)
 
-        # The serial number starts eight bytes in.
-        result = result[8:]
+        CLASS_CORE = 0
+        CLASS_CORE_VERB_READ_SERIAL_NUMBER = 3
+        result = self.execute_command(CLASS_CORE, CLASS_CORE_VERB_READ_SERIAL_NUMBER)
 
         # If we've been asked to convert this to a hex string, do so.
         if as_hex_string:
@@ -292,7 +304,10 @@ class GreatFETBoard(object):
 
     def part_id(self, as_hex_string=True):
         """Reads the board's unique serial number."""
-        result = self.vendor_request_in(vendor_requests.READ_PARTID_SERIALNO, length=24)
+
+        CLASS_CORE = 0
+        CLASS_CORE_VERB_READ_PARTID_SERIALNO = 2
+        result = self.execute_command(CLASS_CORE, CLASS_CORE_VERB_READ_PARTID_SERIALNO)
 
         # The part ID constitues the first eight bytes of the response.
         result = result[0:7]
@@ -316,7 +331,9 @@ class GreatFETBoard(object):
         type = 1 if switch_to_external_clock else 0
 
         try:
-            self.vendor_request_out(vendor_requests.RESET, value=type)
+            CLASS_CORE = 0
+            CLASS_CORE_VERB_REQUEST_RESET = 3
+            self.execute_command(CLASS_CORE, CLASS_CORE_VERB_REQUEST_RESET, data=[type, 0, 0, 0])
         except usb.core.USBError as e:
             pass
 
@@ -445,7 +462,7 @@ class GreatFETBoard(object):
 
         # If we have data, build it into our request.
         if data:
-            to_send = prelude + data
+            to_send = prelude + bytearray(data)
 
             if len(to_send) > LIBGREAT_MAX_COMMAND_SIZE:
                 raise ArgumentError("Command payload is too long!")
