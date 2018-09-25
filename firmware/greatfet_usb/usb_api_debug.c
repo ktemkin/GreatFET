@@ -26,7 +26,7 @@ static int verb_read_dmesg(struct command_transaction *trans)
 static int verb_clear_dmesg(struct command_transaction *trans)
 {
 	// Perform a read where we discard the results.
-	trans->data_out_length = debug_ring_read(trans->data_out, trans->data_out_max_length, false);
+	trans->data_out_length = debug_ring_read(trans->data_out, trans->data_out_max_length, true);
 	return 0;
 }
 
