@@ -64,10 +64,14 @@
 COMMS_DEFINE_HELPERS(uint8_t);
 COMMS_DEFINE_HELPERS(uint16_t);
 COMMS_DEFINE_HELPERS(uint32_t);
+COMMS_DEFINE_HELPERS(uint64_t);
 COMMS_DEFINE_HELPERS(int8_t);
 COMMS_DEFINE_HELPERS(int16_t);
 COMMS_DEFINE_HELPERS(int32_t);
+COMMS_DEFINE_HELPERS(int64_t);
 COMMS_DEFINE_HELPERS(_Bool);
+COMMS_DEFINE_HELPERS(float);
+COMMS_DEFINE_HELPERS(double);
 
 void *comms_response_add_string(struct command_transaction *trans, char const *const response)
 {
@@ -164,7 +168,7 @@ void *comms_response_reserve_space(struct command_transaction *trans, uint32_t s
  * Adds a collection of raw bytes to the response.
  *
  * @param trans The associated transaction.
- * @param data Data buffer to be transmitted.
+ * @param data Data buffer to be transmitted, or null to add all zeroes.
  * @param length The total amount of data from the buffer to include in the response.
  *
  * @return A pointer to the buffer used in the response,
@@ -182,6 +186,13 @@ void *comms_response_add_raw(struct command_transaction *trans, void *data, uint
 	}
 
 	// Copy the provided data into the reserved buffer.
-	memcpy(buffer, data, length);
+	if (data) {
+		memcpy(buffer, data, length);
+	}
+	// Special case: if buffer was NULL, fill the response with zeroes.
+	else {
+		memset(buffer, 0, length);
+	}
+
 	return buffer;
 }

@@ -52,7 +52,7 @@ static volatile ehci_queue_head_t *endpoint_in_qh[NUM_USB1_ENDPOINTS];
 /**
  * Enumeration describing each of the possible Index values for GET_STATUS
  * requests.
- */ 
+ */
 enum greatdancer_status_request {
 	GET_PORTSC1 = 0,
 	GET_READ_STATUS = 1,
@@ -166,7 +166,7 @@ static uint32_t get_status_register(uint16_t index,
 		const usb_peripheral_t* const host)
 {
 	switch(index) {
-		case GET_PORTSC1:      return USB_REG(host->controller)->PORTSC1;
+		case GET_PORTSC1:      return host->registers->portsc1;
 		case GET_READ_STATUS:  return usbhost_get_read_status();
 		case GET_WRITE_STATUS: return usbhost_get_write_status();
 	}
@@ -332,7 +332,7 @@ usb_request_status_t usb_vendor_request_usbhost_send_on_endpoint(
 			return USB_REQUEST_STATUS_STALL;
 	}
 
-	ehci_queue_head_t *endpoint_queue = get_queue_head_for_endpoint(endpoint_number);
+	volatile ehci_queue_head_t *endpoint_queue = get_queue_head_for_endpoint(endpoint_number);
 
 	if (stage == USB_TRANSFER_STAGE_SETUP) {
 
@@ -430,7 +430,7 @@ usb_request_status_t usb_vendor_request_usbhost_start_nonblocking_read(
 
 		// FIXME: Grab the endpoint queue for the given endpoint, rather than always
 		// assuming EP0.
-		ehci_queue_head_t *endpoint_queue = get_queue_head_for_endpoint(endpoint_number);
+		volatile ehci_queue_head_t *endpoint_queue = get_queue_head_for_endpoint(endpoint_number);
 
 		// If we don't have a endpoint queue set up for this endpoint, fail out.
 		if(!endpoint_queue) {

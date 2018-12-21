@@ -75,6 +75,8 @@ static int glitchkit_usb_verb_configure_requests(struct command_transaction *tra
 
 static int glitchkit_usb_verb_control_in(struct command_transaction *trans)
 {
+	usb_peripheral_t *host = &usb_peripherals[1];
+
 	static volatile ehci_queue_head_t active_qh;
 	int rc, final_rc = 0;
 
@@ -115,7 +117,7 @@ static int glitchkit_usb_verb_control_in(struct command_transaction *trans)
 	delay_us(100 * 1000);
 
 	// Validate that the device is present, and error out if it isn't.
-	if(!(USB_REG(1)->PORTSC1 & USB0_PORTSC1_H_CCS) && !continue_despite_errors) {
+	if(!(host->registers->portsc1 & USB0_PORTSC1_H_CCS) && !continue_despite_errors) {
 		pr_warning("USB request to target: no target device (device's USB pull-ups not detected).\n");
 		return ENODEV;
 	} else {
@@ -124,7 +126,8 @@ static int glitchkit_usb_verb_control_in(struct command_transaction *trans)
 	}
 
 	// Determine the way the endpoint should talk to the device...
-	ep_speed_bits = (USB_REG(1)->PORTSC1 >> USB0_PORTSC1_H_PSPD_SHIFT) & USB0_PORTSC1_H_PSPD_MASK;
+	// FIXME: use usb_speed from usb.c instead
+	ep_speed_bits = (host->registers->portsc1 >> USB0_PORTSC1_H_PSPD_SHIFT) & USB0_PORTSC1_H_PSPD_MASK;
 	if (ep_speed_bits) {
 		ep_speed = USB_SPEED_LOW;
 		max_packet_size_for_usb_speed = 8;

@@ -46,6 +46,7 @@ usb_peripheral_t usb_peripherals[] = {
 		.configurations = &usb0_configurations,
 		.configuration = 0,
 		.controller = 0,
+		.registers = USB0_REGISTER_BLOCK
 	},
 	{
 		.descriptor = usb1_descriptor_device,
@@ -54,5 +55,6 @@ usb_peripheral_t usb_peripherals[] = {
 		.configurations = &usb1_configurations,
 		.configuration = 0,
 		.controller = 1,
+		.registers = USB1_REGISTER_BLOCK
 	}
 };

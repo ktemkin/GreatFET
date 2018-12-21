@@ -358,10 +358,14 @@ bool comms_pipe_ready(struct comms_pipe *pipe);
 COMMS_DECLARE_HELPERS(uint8_t);
 COMMS_DECLARE_HELPERS(uint16_t);
 COMMS_DECLARE_HELPERS(uint32_t);
+COMMS_DECLARE_HELPERS(uint64_t);
 COMMS_DECLARE_HELPERS(int8_t);
 COMMS_DECLARE_HELPERS(int16_t);
 COMMS_DECLARE_HELPERS(int32_t);
+COMMS_DECLARE_HELPERS(int64_t);
 COMMS_DECLARE_HELPERS(_Bool);
+COMMS_DECLARE_HELPERS(float);
+COMMS_DECLARE_HELPERS(double);
 
 /** Alias for _Bool, per the C standard. */
 static inline void *comms_response_add_bool(struct command_transaction *trans, bool response)
