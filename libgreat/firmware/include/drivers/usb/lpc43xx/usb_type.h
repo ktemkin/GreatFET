@@ -9,6 +9,9 @@
 #include <stdbool.h>
 #include <toolchain.h>
 
+// TODO: should this be platform-registers or etc?
+#include <drivers/usb/lpc43xx/usb_registers.h>
+
 // TODO: move things out of here so we don't super-pollute the namespace
 #include <libopencm3/lpc43xx/usb.h>
 
@@ -67,12 +70,12 @@ typedef enum {
 
 	USB_SETUP_REQUEST_TYPE_shift = 5,
 	USB_SETUP_REQUEST_TYPE_mask = 3 << USB_SETUP_REQUEST_TYPE_shift,
-	
+
 	USB_SETUP_REQUEST_TYPE_STANDARD = 0 << USB_SETUP_REQUEST_TYPE_shift,
 	USB_SETUP_REQUEST_TYPE_CLASS = 1 << USB_SETUP_REQUEST_TYPE_shift,
 	USB_SETUP_REQUEST_TYPE_VENDOR = 2 << USB_SETUP_REQUEST_TYPE_shift,
 	USB_SETUP_REQUEST_TYPE_RESERVED = 3 << USB_SETUP_REQUEST_TYPE_shift,
-	
+
 	USB_SETUP_REQUEST_TYPE_DATA_TRANSFER_DIRECTION_shift = 7,
 	USB_SETUP_REQUEST_TYPE_DATA_TRANSFER_DIRECTION_mask = 1 << USB_SETUP_REQUEST_TYPE_DATA_TRANSFER_DIRECTION_shift,
 	USB_SETUP_REQUEST_TYPE_DATA_TRANSFER_DIRECTION_HOST_TO_DEVICE = 0 << USB_SETUP_REQUEST_TYPE_DATA_TRANSFER_DIRECTION_shift,
@@ -83,7 +86,7 @@ typedef enum {
 	USB_TRANSFER_DIRECTION_OUT = 0,
 	USB_TRANSFER_DIRECTION_IN = 1,
 } usb_transfer_direction_t;
-	
+
 typedef enum {
 	USB_DESCRIPTOR_TYPE_DEVICE = 1,
 	USB_DESCRIPTOR_TYPE_CONFIGURATION = 2,
@@ -233,6 +236,8 @@ typedef struct {
 	usb_controller_mode_t mode;
 	const uint8_t controller;
 
+	volatile usb_register_block_t *registers;
+
 	union {
 		// Device mode fields.
 		// TODO: get e.g. descriptor things out of here!
@@ -242,8 +247,9 @@ typedef struct {
 			const uint8_t* const qualifier_descriptor;
 			usb_configuration_t* (*configurations)[];
 			const usb_configuration_t* configuration;
-
 			usb_queue_head_t queue_heads_device[12] ATTR_ALIGNED(2048);
+
+			uint32_t last_suspend_time;
 		};
 
 		// Host mode fields.
