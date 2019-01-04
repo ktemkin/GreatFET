@@ -43,7 +43,7 @@ int usb_provide_vbus(usb_peripheral_t *host)
 {
 
 	// Enable the port power bit.
-	host->registers->portsc1 |= USB0_PORTSC1_H_PP;
+	host->reg->portsc1 |= USB0_PORTSC1_H_PP;
 
 	if(host->controller == 1) {
 
@@ -99,7 +99,7 @@ void usb_host_enable_pulldowns(usb_peripheral_t *host)
 #ifdef BOARD_QUIRK_USE_INTERNAL_DM_PULLDOWN
 	// If this board doesn't explicitly provide a pull-down resistor on DM,
 	// we can use the OTG termination resistor as a pull-down. Turn it on.
-	host->registers->otgsc |= USB0_OTGSC_OT;
+	host->reg->otgsc |= USB0_OTGSC_OT;
 #endif
 }
 
@@ -112,7 +112,7 @@ void usb_host_disable_pulldowns(usb_peripheral_t *host)
 #ifdef BOARD_QUIRK_USE_INTERNAL_DM_PULLDOWN
 	// If this board doesn't explicitly provide a pull-down resistor on DM,
 	// we use the OTG termination resistor as a pull-down. Turn it off.
-		host->registers->otgsc &= ~USB0_OTGSC_OT;
+		host->reg->otgsc &= ~USB0_OTGSC_OT;
 #endif
 
 	// FIXME: The GreatFET one currently has no pull-down resistor on DP.
@@ -131,12 +131,12 @@ static void usb_controller_set_host_mode(usb_peripheral_t *host)
 {
 	// Clear the RunStop bit to ensure the host is off, and wait for any
 	// errors that exist to clear.
-	host->registers->usbcmd &= ~USB0_USBCMD_H_RS;
-	while(host->registers->usbsts & USB0_USBSTS_H_HCH);
+	host->reg->usbcmd &= ~USB0_USBCMD_H_RS;
+	while(host->reg->usbsts.all & USB0_USBSTS_H_HCH);
 
 	// Place the USB controller in host mode.
-	host->registers->usbmode &= ~(USB0_USBMODE_H_CM_MASK);
-	host->registers->usbmode |= USB0_USBMODE_H_CM(USBMODE_HOST_MODE);
+	host->reg->usbmode &= ~(USB0_USBMODE_H_CM_MASK);
+	host->reg->usbmode |= USB0_USBMODE_H_CM(USBMODE_HOST_MODE);
 
 
 	// Enable the required pull-down resistors.
@@ -159,11 +159,11 @@ static void usb_controller_set_up_host_interrupts(usb_peripheral_t *host)
 
 	// Disable all currently active interrupts for the given controller.
 	// TODO: Do we want to clear all interrupts, here?
-	host->registers->usbintr = 0;
-	host->registers->usbsts = ~0;
+	host->reg->usbintr.all = 0;
+	host->reg->usbsts.all = ~0;
 
 	// Enable the interrupt modes we want by default for this controller.
-	host->registers->usbintr |=
+	host->reg->usbintr.all |=
 		USB0_USBINTR_H_UE   |
 		USB0_USBINTR_H_SRE  |
 		USB0_USBINTR_H_UEE	| // USB Error
@@ -196,7 +196,7 @@ static void usb_controller_set_up_async_list(usb_peripheral_t *host)
 	host->async_queue_head.overlay.halted = 1;
 
 	// Pass this list to the hardware.
-	host->registers->asynclistaddr = host->async_queue_head.horizontal.link;
+	host->reg->asynclistaddr = host->async_queue_head.horizontal.link;
 }
 
 
@@ -224,7 +224,7 @@ static void usb_controller_set_up_periodic_list(usb_peripheral_t *host)
 	}
 
 	// Pass this list to the hardware.
-	host->registers->periodiclistbase = (uint32_t)&host->periodic_list;
+	host->reg->periodiclistbase = (uint32_t)&host->periodic_list;
 }
 
 
@@ -234,10 +234,10 @@ static void usb_controller_set_up_periodic_list(usb_peripheral_t *host)
 void usb_host_disable_asynchronous_schedule(usb_peripheral_t *host)
 {
 	// Clear the asynchronous schedule enabled bit..
-	host->registers->usbcmd &= ~USB0_USBCMD_H_ASE;
+	host->reg->usbcmd &= ~USB0_USBCMD_H_ASE;
 
 	// ... and wait for the host to report that the schedule has been disabled.
-	while(host->registers->usbsts & USB0_USBSTS_H_AS);
+	while(host->reg->usbsts.all & USB0_USBSTS_H_AS);
 }
 
 
@@ -247,10 +247,10 @@ void usb_host_disable_asynchronous_schedule(usb_peripheral_t *host)
 void usb_host_enable_asynchronous_schedule(usb_peripheral_t *host)
 {
 	// Clear the asynchronous schedule enabled bit..
-	host->registers->usbcmd |= USB0_USBCMD_H_ASE;
+	host->reg->usbcmd |= USB0_USBCMD_H_ASE;
 
 	// ... and wait for the host to report that the schedule has been enabled.
-	while(!(host->registers->usbsts & USB0_USBSTS_H_AS));
+	while(!(host->reg->usbsts.all & USB0_USBSTS_H_AS));
 }
 
 
@@ -269,12 +269,12 @@ static void usb_controller_set_up_lists(usb_peripheral_t *host)
 	host->pending_transfers.ptr = (ehci_link_t *)TERMINATING_LINK;
 
 	// For now, trigger interrupts after a frame list of 32 elements.
-	host->registers->usbcmd |= (USB0_USBCMD_H_FS0 | USB1_USBCMD_H_FS2);
-	host->registers->usbcmd &= ~USB0_USBCMD_H_FS1;
+	host->reg->usbcmd |= (USB0_USBCMD_H_FS0 | USB1_USBCMD_H_FS2);
+	host->reg->usbcmd &= ~USB0_USBCMD_H_FS1;
 
 	// Enable only the Asynchronous schedule for now. The others should be
 	// set up after enumeration based on device requirements.
-	host->registers->usbcmd |= USB0_USBCMD_H_ASE;
+	host->reg->usbcmd |= USB0_USBCMD_H_ASE;
 }
 
 
@@ -304,11 +304,11 @@ void usb_host_init(usb_peripheral_t *host)
 void usb_host_reset_device(usb_peripheral_t *host)
 {
 	// Disable the port, and request that it reset.
-	host->registers->portsc1 &= ~USB0_PORTSC1_H_PE;
-	host->registers->portsc1 |=  USB0_PORTSC1_H_PR;
+	host->reg->portsc1 &= ~USB0_PORTSC1_H_PE;
+	host->reg->portsc1 |=  USB0_PORTSC1_H_PR;
 
 	// Wait for the USB reset to complete.
-	while(host->registers->portsc1 & USB0_PORTSC1_H_PR);
+	while(host->reg->portsc1 & USB0_PORTSC1_H_PR);
 }
 
 
@@ -328,6 +328,8 @@ void usb_host_handle_error(usb_peripheral_t *host)
  */
 static void usb_host_service_per_frame_events(usb_peripheral_t *host)
 {
+	(void)host;
+
 	// Apply any pending GlitchKit events that were waiting for frame synchronization.
 	glitchkit_apply_deferred_events(
 		GLITCHKIT_USBHOST_START_TD    |
@@ -346,24 +348,23 @@ static void usb_host_service_per_frame_events(usb_peripheral_t *host)
 static void usb_host_isr(usb_peripheral_t *host) {
 
 	// Read (and clear) the set of active ISRs to be handled.
-	const uint32_t status = usb_get_status(host);
+	const usb_interrupt_flags_t status = usb_get_status(host);
 
 	// Start of frame: handle any events that need synchronization
 	// to the (micro)frame timer.
-	if (status & USB0_USBSTS_H_SRI) {
+	if (status.all & USB0_USBSTS_H_SRI) {
 		usb_host_service_per_frame_events(host);
 	}
 
 	// If we've just finished an event on the asynchronous queue,
 	// handle it.
-	if (status & USB0_USBSTS_H_UI) {
+	if (status.all & USB0_USBSTS_H_UI) {
 		glitchkit_notify_event(GLITCHKIT_USBHOST_FINISH_TD);
 		usb_host_handle_asynchronous_transfer_complete(host);
 	}
 
-	if (status & USB0_USBSTS_H_UEI) {
+	if (status.all & USB0_USBSTS_H_UEI) {
 		usb_host_handle_error(host);
 	}
-
 
 }

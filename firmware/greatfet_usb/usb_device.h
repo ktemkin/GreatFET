@@ -7,6 +7,10 @@
 
 #include <drivers/usb/lpc43xx/usb_type.h>
 
+enum {
+	USB_DESCRIPTOR_STRING_SERIAL_LEN = 32
+};
+
 extern usb_peripheral_t usb_peripherals[2];
 
 #endif /* end of include guard: __USB_DEVICE_H__ */

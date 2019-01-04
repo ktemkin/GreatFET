@@ -15,6 +15,7 @@
 #define NUM_USB_CONTROLLERS 2
 #define NUM_USB1_ENDPOINTS 4
 
+
 extern usb_peripheral_t usb_peripherals[2];
 
 void usb_peripheral_reset();
@@ -75,9 +76,8 @@ usb_speed_t usb_speed(
 	const usb_peripheral_t* const device
 );
 
-uint32_t usb_get_status(
-	const usb_peripheral_t* const device
-);
+
+usb_interrupt_flags_t usb_get_status(const usb_peripheral_t* const device);
 
 uint32_t usb_get_endpoint_setup_status(
 	const usb_peripheral_t* const device
@@ -112,11 +112,8 @@ void usb_set_address_deferred(
 	const uint_fast8_t address
 );
 
-void usb_endpoint_init_without_descriptor(
-	const usb_endpoint_t* const endpoint,
-  uint_fast16_t max_packet_size,
-  usb_transfer_type_t transfer_type
-);
+void usb_configure_endpoint_queue_head(usb_endpoint_t *endpoint,
+		uint16_t max_packet_size, usb_transfer_type_t transfer_type);
 
 void usb_in_endpoint_enable_nak_interrupt(
 	const usb_endpoint_t* const endpoint
@@ -126,9 +123,7 @@ void usb_in_endpoint_disable_nak_interrupt(
 	const usb_endpoint_t* const endpoint
 );
 
-void usb_endpoint_init(
-	const usb_endpoint_t* const endpoint
-);
+void usb_endpoint_init(usb_endpoint_t *endpoint);
 
 void usb_endpoint_stall(
 	const usb_endpoint_t* const endpoint
@@ -163,9 +158,36 @@ void usb_endpoint_schedule_append(
 );
 
 
-void usb_copy_setup(
-	usb_setup_t* const dst,
-	const volatile uint8_t* const src
-);
+void usb_copy_setup(usb_setup_t* const dst, const volatile uint8_t* const src);
+
+/**
+ * Apply a given configuration to the USB device.
+ *
+ * @param configuration_value The configuration value for the given configuration,
+ *		as denoted in the relevant configuration descriptor, or 0 to de-configure the device.
+ *
+ * @return 0 on success, or an error code on failure.
+ */
+int usb_set_configuration(usb_peripheral_t *device, uint8_t configuration_number);
+
+
+/**
+ * Finds the configuration descriptor associated with the given value.
+ *
+ * @param configuration_value The value to search for a descriptor for.
+ * @return A pointer to the configuration descriptor, or NULL if none could be found.
+ */
+usb_configuration_descriptor_t * usb_find_configuration_descriptor(
+		usb_peripheral_t *device, uint8_t configuration_value);
+
+
+/**
+ * Finds the configuration descriptor associated with the given value.
+ *
+ * @param configuration_value The value to search for a descriptor for.
+ * @return A pointer to the configuration descriptor, or NULL if none could be found.
+ */
+usb_configuration_descriptor_t * usb_find_other_speed_configuration_descriptor(
+		usb_peripheral_t *device, uint8_t configuration_value);
 
 #endif//__USB_H__

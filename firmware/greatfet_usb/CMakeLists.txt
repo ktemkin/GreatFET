@@ -46,7 +46,6 @@ set(SRC_M4
     "${PATH_GREATFET_FIRMWARE_COMMON}/gpdma.c"
     "${PATH_GREATFET_FIRMWARE_COMMON}/gpio_dma.c"
     "${PATH_GREATFET_FIRMWARE_COMMON}/gpio_scu.c"
-    usb_descriptor.c
     usb_device.c
     usb_endpoint.c
     sgpio_isr.c

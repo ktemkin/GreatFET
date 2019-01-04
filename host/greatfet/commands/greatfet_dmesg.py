@@ -10,6 +10,7 @@ import errno
 import sys
 
 import greatfet
+import pygreat
 from greatfet import GreatFET
 from greatfet.utils import log_silent, log_verbose
 
@@ -27,7 +28,7 @@ def main():
         log_function("Trying to find a GreatFET device...")
         device = GreatFET(serial_number=args.serial)
         log_function("{} found. (Serial number: {})".format(device.board_name(), device.serial_number()))
-    except greatfet.errors.DeviceNotFoundError:
+    except pygreat.errors.DeviceNotFoundError:
         if args.serial:
             print("No GreatFET board found matching serial '{}'.".format(args.serial), file=sys.stderr)
         else:
@@ -42,4 +43,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
+

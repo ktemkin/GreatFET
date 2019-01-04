@@ -17,7 +17,6 @@
 
 #include <drivers/usb/lpc43xx/usb.h>
 #include <drivers/usb/lpc43xx/usb_standard_request.h>
-#include "../usb_descriptor.h"
 #include "../usb_device.h"
 #include "../usb_endpoint.h"
 #include <drivers/usb/lpc43xx/usb_request.h>
@@ -148,8 +147,8 @@ static void set_up_greatdancer_device(uint16_t max_packet_size) {
 	}
 
 	// And initialize the endpoint.
-	usb_endpoint_init_without_descriptor(ep0_in,  max_packet_size, USB_TRANSFER_TYPE_CONTROL);
-	usb_endpoint_init_without_descriptor(ep0_out, max_packet_size, USB_TRANSFER_TYPE_CONTROL);
+	usb_configure_endpoint_queue_head(ep0_in,  max_packet_size, USB_TRANSFER_TYPE_CONTROL);
+	usb_configure_endpoint_queue_head(ep0_out, max_packet_size, USB_TRANSFER_TYPE_CONTROL);
 }
 
 
@@ -234,7 +233,7 @@ static int greatdancer_verb_set_up_endpoints(struct command_transaction *trans)
 		}
 
 		// And initialize the endpoint.
-		usb_endpoint_init_without_descriptor(target_endpoint, max_packet_size, transfer_type);
+		usb_configure_endpoint_queue_head(target_endpoint, max_packet_size, transfer_type);
 
 		// Finally, enable notifications when NAKs occur for this endpoint.
 		// TODO: Make this optional?
@@ -652,21 +651,21 @@ static void greatdancer_handle_naks()
  * Handle interrupts for the Greatdancer's USB controller.
  */
 static void greatdancer_usb_isr(void) {
-	const uint32_t status = usb_get_status(&usb_peripherals[1]);
+	const usb_interrupt_flags_t status = usb_get_status(&usb_peripherals[1]);
 
-	if( status == 0 ) {
+	if( status.all == 0 ) {
 		// Nothing to do.
 		return;
 	}
 
 	// If a USB event has happened, handle it.
-	if( status & USB1_USBSTS_D_UI ) {
+	if (status.usb_interrupt) {
 		glitchkit_notify_event(GLITCHKIT_USBDEVICE_FINISH_TD);
 		greatdancer_check_for_asynchronous_events();
 	}
 
 	// If we've issued a NAK, service the relevant interrupt.
-	if (status & USB1_USBSTS_D_NAKI ) {
+	if (status.nak_interrupt) {
 		greatdancer_handle_naks();
 	}
 
@@ -674,7 +673,7 @@ static void greatdancer_usb_isr(void) {
 	// of its status bits. This is necessary, so this interrupt doesn't re-fire
 	// continuously, but it also steals information that the host wants. We thus
 	// store the remaining USBSTS bits our our module's state.
-	__sync_fetch_and_or(&usbsts_deferred, status);
+	__sync_fetch_and_or(&usbsts_deferred, status.all);
 }
 
 

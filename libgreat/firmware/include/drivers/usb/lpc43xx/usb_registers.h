@@ -5,6 +5,26 @@
 #ifndef __USB_REGISTERS_H__
 #define __USB_REGISTERS_H__
 
+
+typedef union {
+	struct {
+		uint32_t usb_interrupt        :  1;
+		uint32_t usb_error_interrupt  :  1;
+		uint32_t port_change_detected :  1;
+		uint32_t                      :  1;
+		uint32_t system_error         :  1;
+		uint32_t                      :  1;
+		uint32_t usb_reset_received   :  1;
+		uint32_t sof_received         :  1;
+		uint32_t dc_suspend           :  1;
+		uint32_t                      :  7;
+		uint32_t nak_interrupt        :  1;
+		uint32_t                      : 15;
+	} ATTR_PACKED;
+	uint32_t all;
+} usb_interrupt_flags_t;
+
+
 /**
  * Structure describing the USB register blocks.
  * Used so we don't have to have tons of constants floating around.
@@ -20,8 +40,10 @@ typedef struct {
 	volatile uint32_t reserved2[6]; /* 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c */
 
 	volatile uint32_t usbcmd;
-	volatile uint32_t usbsts;
-	volatile uint32_t usbintr;
+
+	volatile usb_interrupt_flags_t usbsts;
+	volatile usb_interrupt_flags_t usbintr;
+
 	volatile uint32_t frindex;
 
 	volatile uint32_t reserved3;

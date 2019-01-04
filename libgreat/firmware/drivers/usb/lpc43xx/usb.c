@@ -20,7 +20,7 @@
 #include <libopencm3/lpc43xx/usb.h>
 #include <libopencm3/lpc43xx/scu.h>
 
-// FIXME: Clean me up to use the USB_REG macro from usb_registers.h to reduce duplication!
+
 
 #define USB_QH_INDEX(endpoint_address) (((endpoint_address & 0xF) * 2) + ((endpoint_address >> 7) & 1))
 
@@ -99,11 +99,11 @@ void usb_phy_enable(const usb_peripheral_t* const device) {
 
 static void usb_clear_pending_interrupts(const uint32_t mask, const usb_peripheral_t* const device)
 {
-	device->registers->endptnak = mask;
-	device->registers->endptnaken = mask;
-	device->registers->usbsts = mask;
-	device->registers->endptsetupstat = device->registers->endptsetupstat & mask;
-	device->registers->endptcomplete = device->registers->endptcomplete & mask;
+	device->reg->endptnak = mask;
+	device->reg->endptnaken = mask;
+	device->reg->usbsts.all = mask;
+	device->reg->endptsetupstat = device->reg->endptsetupstat & mask;
+	device->reg->endptcomplete = device->reg->endptcomplete & mask;
 }
 
 
@@ -117,7 +117,7 @@ static void usb_wait_for_endpoint_priming_to_finish(const uint32_t mask, const u
 {
 	// Wait until controller has parsed new transfer descriptors and prepared
 	// receive buffers. // TODO: support timeout?
-	while (device->registers->endptprime & mask);
+	while (device->reg->endptprime & mask);
 }
 
 
@@ -125,7 +125,7 @@ static void usb_flush_endpoints(const uint32_t mask, const usb_peripheral_t* con
 {
 	// Clear any primed buffers. If a packet is in progress, that transfer
 	// will continue until completion.
-	device->registers->endptflush = mask;
+	device->reg->endptflush = mask;
 }
 
 
@@ -133,7 +133,7 @@ static void usb_wait_for_endpoint_flushing_to_finish(const uint32_t mask, const 
 {
 	// Wait until controller has flushed all endpoints / cleared any primed
 	// buffers.
-	while (device->registers->endptflush & mask);
+	while (device->reg->endptflush & mask);
 }
 
 
@@ -155,7 +155,7 @@ static void usb_flush_all_primed_endpoints(const usb_peripheral_t* const device)
 
 static void usb_endpoint_set_type(const usb_endpoint_t* const endpoint, const usb_transfer_type_t transfer_type)
 {
-	volatile usb_register_block_t *registers = endpoint->device->registers;
+	volatile usb_register_block_t *registers = endpoint->device->reg;
 
 	// NOTE: UM10503 section 23.6.24 "Endpoint 1 to 5 control registers" says
 	// that the disabled side of an endpoint must be set to a non-control type
@@ -170,7 +170,7 @@ static void usb_endpoint_set_type(const usb_endpoint_t* const endpoint, const us
 static void usb_endpoint_enable(const usb_endpoint_t* const endpoint)
 {
 	const uint_fast8_t endpoint_number = usb_endpoint_number(endpoint->address);
-	volatile usb_register_block_t *registers = endpoint->device->registers;
+	volatile usb_register_block_t *registers = endpoint->device->reg;
 
 	registers->endptctrl[endpoint_number] |= usb_endpoint_is_in(endpoint->address) ?
 		(USB0_ENDPTCTRL_TXE | USB0_ENDPTCTRL_TXR) :(USB0_ENDPTCTRL_RXE | USB0_ENDPTCTRL_RXR);
@@ -189,7 +189,7 @@ static void usb_endpoint_clear_pending_interrupts(const usb_endpoint_t* const en
 void usb_endpoint_disable(const usb_endpoint_t* const endpoint)
 {
 	const uint_fast8_t endpoint_number = usb_endpoint_number(endpoint->address);
-	volatile usb_register_block_t *registers = endpoint->device->registers;
+	volatile usb_register_block_t *registers = endpoint->device->reg;
 
 	// Disable the endpoint...
 	uint32_t mask = usb_endpoint_is_in(endpoint->address) ? USB0_ENDPTCTRL_TXE : USB0_ENDPTCTRL_RXE;
@@ -206,7 +206,7 @@ void usb_endpoint_prime(const usb_endpoint_t* const endpoint, usb_transfer_descr
 {
 	usb_queue_head_t* const qh = usb_queue_head(endpoint->address, endpoint->device);
 	const uint_fast8_t endpoint_number = usb_endpoint_number(endpoint->address);
-	volatile usb_register_block_t *registers = endpoint->device->registers;
+	volatile usb_register_block_t *registers = endpoint->device->reg;
 
 	uint32_t prime_mask = usb_endpoint_is_in(endpoint->address) ?
 		USB0_ENDPTPRIME_PETB(1 << endpoint_number) : USB0_ENDPTPRIME_PERB(1 << endpoint_number);
@@ -223,7 +223,7 @@ void usb_endpoint_prime(const usb_endpoint_t* const endpoint, usb_transfer_descr
 static bool usb_endpoint_is_priming(const usb_endpoint_t* const endpoint)
 {
 	const uint_fast8_t endpoint_number = usb_endpoint_number(endpoint->address);
-	volatile usb_register_block_t *registers = endpoint->device->registers;
+	volatile usb_register_block_t *registers = endpoint->device->reg;
 
 	uint32_t prime_mask = usb_endpoint_is_in(endpoint->address) ?
 		USB0_ENDPTPRIME_PETB(1 << endpoint_number) : USB0_ENDPTPRIME_PERB(1 << endpoint_number);
@@ -254,7 +254,7 @@ void usb_endpoint_schedule_wait(const usb_endpoint_t* const endpoint, usb_transf
 void usb_endpoint_schedule_append(const usb_endpoint_t* const endpoint,
 		usb_transfer_descriptor_t* const tail_td, usb_transfer_descriptor_t* const new_td)
 {
-	volatile usb_register_block_t *registers = endpoint->device->registers;
+	volatile usb_register_block_t *registers = endpoint->device->reg;
 
 	bool done = 0;
 	tail_td->next_dtd_pointer = new_td;
@@ -295,7 +295,7 @@ void usb_endpoint_flush(const usb_endpoint_t* const endpoint)
 bool usb_endpoint_is_ready(const usb_endpoint_t* const endpoint)
 {
 	const uint_fast8_t endpoint_number = usb_endpoint_number(endpoint->address);
-	volatile usb_register_block_t *registers = endpoint->device->registers;
+	volatile usb_register_block_t *registers = endpoint->device->reg;
 
 	uint32_t ready_mask = usb_endpoint_is_in(endpoint->address) ?
 		USB0_ENDPTSTAT_ETBR(1 << endpoint_number) : USB0_ENDPTSTAT_ERBR(1 << endpoint_number);
@@ -307,7 +307,7 @@ bool usb_endpoint_is_ready(const usb_endpoint_t* const endpoint)
 bool usb_endpoint_is_complete(const usb_endpoint_t* const endpoint)
 {
 	const uint_fast8_t endpoint_number = usb_endpoint_number(endpoint->address);
-	volatile usb_register_block_t *registers = endpoint->device->registers;
+	volatile usb_register_block_t *registers = endpoint->device->reg;
 
 	uint32_t complete_mask = usb_endpoint_is_in(endpoint->address) ?
 		USB0_ENDPTCOMPLETE_ETCE(1 << endpoint_number) : USB0_ENDPTCOMPLETE_ERCE(1 << endpoint_number);
@@ -322,7 +322,7 @@ void usb_endpoint_stall(const usb_endpoint_t* const endpoint)
 
 	// Endpoint is to be stalled as a pair -- both OUT and IN.
 	// See UM10503 section 23.10.5.2 "Stalling"
-	endpoint->device->registers->endptctrl[endpoint_number] |= (USB0_ENDPTCTRL_RXS | USB0_ENDPTCTRL_TXS);
+	endpoint->device->reg->endptctrl[endpoint_number] |= (USB0_ENDPTCTRL_RXS | USB0_ENDPTCTRL_TXS);
 
 	// If this is a protocol stall (a stall on a control endpoint),
 	// clear out any allocated TDs.
@@ -335,19 +335,19 @@ void usb_endpoint_stall(const usb_endpoint_t* const endpoint)
 
 void usb_controller_run(const usb_peripheral_t* const device)
 {
-	device->registers->usbcmd |= USB0_USBCMD_D_RS;
+	device->reg->usbcmd |= USB0_USBCMD_D_RS;
 }
 
 
 static void usb_controller_stop(const usb_peripheral_t* const device)
 {
-	device->registers->usbcmd &= ~USB0_USBCMD_D_RS;
+	device->reg->usbcmd &= ~USB0_USBCMD_D_RS;
 }
 
 
 static uint_fast8_t usb_controller_is_resetting(const usb_peripheral_t* const device)
 {
-	return (device->registers->usbcmd & USB0_USBCMD_D_RST) != 0;
+	return (device->reg->usbcmd & USB0_USBCMD_D_RST) != 0;
 }
 
 
@@ -374,20 +374,20 @@ static void usb_controller_set_device_mode(usb_peripheral_t* device)
 	usb_host_disable_pulldowns(device);
 
 	// Set USB device mode
-	device->registers->usbmode = USB0_USBMODE_D_CM1_0(2);
+	device->reg->usbmode = USB0_USBMODE_D_CM1_0(2);
 
 	// If this is the USB1 port, set the OTG-related termination.
 	if( device->controller == 0) {
 		// Set device-related OTG flags
 		// OTG termination: controls pull-down on USB_DM
-		device->registers->otgsc = USB0_OTGSC_OT;
+		device->reg->otgsc = USB0_OTGSC_OT;
 	}
 }
 
 
-usb_speed_t usb_speed(const usb_peripheral_t* const device)
+usb_speed_t usb_current_device_speed(const usb_peripheral_t* const device)
 {
-	switch (device->registers->portsc1 & USB0_PORTSC1_D_PSPD_MASK)
+	switch (device->reg->portsc1 & USB0_PORTSC1_D_PSPD_MASK)
 	{
 		case USB0_PORTSC1_D_PSPD(0):
 			return USB_SPEED_FULL;
@@ -403,17 +403,17 @@ usb_speed_t usb_speed(const usb_peripheral_t* const device)
 }
 
 
-uint32_t usb_get_status(const usb_peripheral_t* const device)
+usb_interrupt_flags_t usb_get_status(const usb_peripheral_t* const device)
 {
-	uint32_t status = 0;
+	usb_interrupt_flags_t status;
 
 	// Read the status of the activated interrupts...
-	status =  device->registers->usbsts & device->registers->usbintr;
+	status.all =  device->reg->usbsts.all & device->reg->usbintr.all;
 
 	// Clear flags that were just read, leaving alone any flags that
 	// were just set (after the read). It's important to read and
 	// reset flags atomically! :-)
-	device->registers->usbsts = status;
+	device->reg->usbsts.all = status.all;
 	return status;
 }
 
@@ -422,51 +422,51 @@ void usb_clear_endpoint_setup_status(const uint32_t endpoint_setup_status,
 		const usb_peripheral_t* const device)
 {
 	// Clear the Setup ready, and wait for the clear to complete.
-	device->registers->endptsetupstat = endpoint_setup_status;
-	while (device->registers->endptsetupstat & endpoint_setup_status);
+	device->reg->endptsetupstat = endpoint_setup_status;
+	while (device->reg->endptsetupstat & endpoint_setup_status);
 }
 
 
 uint32_t usb_get_endpoint_setup_status(const usb_peripheral_t* const device)
 {
-	return device->registers->endptsetupstat;
+	return device->reg->endptsetupstat;
 }
 
 
 void usb_clear_endpoint_complete(const uint32_t endpoint_complete, const usb_peripheral_t* const device)
 {
-	device->registers->endptcomplete = endpoint_complete;
+	device->reg->endptcomplete = endpoint_complete;
 }
 
 
 uint32_t usb_get_endpoint_complete(const usb_peripheral_t* const device)
 {
-	return device->registers->endptcomplete;
+	return device->reg->endptcomplete;
 }
 
 
 uint32_t usb_get_endpoint_ready(const usb_peripheral_t* const device)
 {
-	return device->registers->endptstat;
+	return device->reg->endptstat;
 }
 
 static void usb_disable_all_endpoints(const usb_peripheral_t* const device)
 {
 	// Endpoint 0 is always enabled. TODO: So why set ENDPTCTRL0?
 	for (int i = 0; i < 6; ++i) {
-		device->registers->endptctrl[i] &= ~(USB0_ENDPTCTRL0_RXE | USB0_ENDPTCTRL0_TXE);
+		device->reg->endptctrl[i] &= ~(USB0_ENDPTCTRL0_RXE | USB0_ENDPTCTRL0_TXE);
 	}
 }
 
 void usb_set_address_immediate(const usb_peripheral_t* const device, const uint_fast8_t address)
 {
-	device->registers->deviceaddr = USB0_DEVICEADDR_USBADR(address);
+	device->reg->deviceaddr = USB0_DEVICEADDR_USBADR(address);
 }
 
 
 void usb_set_address_deferred(const usb_peripheral_t* const device, const uint_fast8_t address)
 {
-	device->registers->deviceaddr = USB0_DEVICEADDR_USBADR(address) | USB0_DEVICEADDR_USBADRA;
+	device->reg->deviceaddr = USB0_DEVICEADDR_USBADR(address) | USB0_DEVICEADDR_USBADRA;
 }
 
 
@@ -489,7 +489,7 @@ void usb_controller_reset(usb_peripheral_t* const device)
 	// machines to initial values. Not recommended when device is in attached
 	// state -- effect on attached host is undefined. Detach first by flushing
 	// all primed endpoints and stopping controller.
-	device->registers->usbcmd = USB0_USBCMD_D_RST;
+	device->reg->usbcmd = USB0_USBCMD_D_RST;
 	while(usb_controller_is_resetting(device));
 }
 
@@ -516,6 +516,137 @@ static void usb_interrupt_enable(usb_peripheral_t* const device)
 }
 
 
+/**
+ * Provides a reference to the pool of all configurations associated with
+ * the device's current speed.
+ */
+static usb_configuration_descriptor_t **usb_current_configuration_pool(usb_peripheral_t *device)
+{
+	// Select the pool of configuration descriptors we're working with
+	if (usb_current_device_speed(device) == USB_SPEED_HIGH) {
+		return device->high_speed_configurations;
+	} else {
+		return device->full_speed_configurations;
+	}
+}
+
+
+/**
+ * @returns a reference to the pool of all configurations associated with
+ * the device's current speed.
+ */
+static usb_configuration_descriptor_t **usb_other_configuration_pool(usb_peripheral_t *device)
+{
+	// Select the pool of configuration descriptors we're working with
+	if (usb_current_device_speed(device) == USB_SPEED_HIGH) {
+		return device->full_speed_configurations;
+	} else {
+		return device->high_speed_configurations;
+	}
+}
+
+/**
+ * Finds the configuration descriptor associated with the given value.
+ *
+ * @param configuration_value The value to search for a descriptor for.
+ * @return A pointer to the configuration descriptor, or NULL if none could be found.
+ */
+static usb_configuration_descriptor_t * _usb_find_configuration_descriptor(
+		usb_peripheral_t *device, uint8_t configuration_value, bool is_other_speed)
+{
+	usb_device_descriptor_t *device_descriptor = device->device_descriptor;
+	usb_configuration_descriptor_t **configurations;
+
+	// If we're looking for configurations for the non-active pool, grab that pool.
+	// Otherwise, use the current pool of configurations.
+	if (is_other_speed) {
+		configurations = usb_other_configuration_pool(device);
+	} else {
+		configurations = usb_current_configuration_pool(device);
+	}
+
+	// A configuration value of "0" indicates an unconfigured device; and accoridingly
+	// has no descriptor.
+	if (!configuration_value) {
+		return NULL;
+	}
+
+	// If the device doesn't have any known configurations, we must not have any
+	// descriptors.  Fail out.
+	if (!configurations) {
+		return NULL;
+	}
+
+	// Iterate through each of the configurations possible for the current device speed.
+	for (int i = 0; i < device_descriptor->configuration_count; ++i) {
+		usb_configuration_descriptor_t *config = configurations[i];
+
+		// If we've found the relevant configuration, return it.
+		if (config->value == configuration_value) {
+			return config;
+		}
+	}
+
+	return NULL;
+}
+
+
+/**
+ * Finds the configuration descriptor associated with the given value.
+ *
+ * @param configuration_value The value to search for a descriptor for.
+ * @return A pointer to the configuration descriptor, or NULL if none could be found.
+ */
+usb_configuration_descriptor_t * usb_find_configuration_descriptor(
+		usb_peripheral_t *device, uint8_t configuration_value) {
+	return _usb_find_configuration_descriptor(device, configuration_value, false);
+}
+
+
+/**
+ * Finds the configuration descriptor associated with the given value.
+ *
+ * @param configuration_value The value to search for a descriptor for.
+ * @return A pointer to the configuration descriptor, or NULL if none could be found.
+ */
+usb_configuration_descriptor_t * usb_find_other_speed_configuration_descriptor(
+		usb_peripheral_t *device, uint8_t configuration_value) {
+	return _usb_find_configuration_descriptor(device, configuration_value, true);
+}
+
+
+/**
+ * Apply a given configuration to the USB device.
+ *
+ * @param configuration_value The configuration value for the given configuration,
+ *		as denoted in the relevant configuration descriptor, or 0 to de-configure the device.
+ *
+ * @return 0 on success, or an error code on failure.
+ */
+int usb_set_configuration(usb_peripheral_t *device, uint8_t configuration_value)
+{
+	// Try to find the configuration descriptor for the relevant configuration.
+	usb_configuration_descriptor_t *new_configuration =
+		usb_find_configuration_descriptor(device, configuration_value);
+
+	// If we're trying to apply a configuration, and we couldn't find a relevant
+	// descriptor, fail out.
+	if (configuration_value && !new_configuration) {
+		return EFAULT;
+	}
+
+	// If the configuration's changed, store it.
+	device->active_configuration = new_configuration;
+
+	// If the device has registered a callback
+	if (device->configuration_changed_callback) {
+		device->configuration_changed_callback(device);
+	}
+
+	return 0;
+}
+
+
 void usb_device_init(usb_peripheral_t* const device)
 {
 	usb_phy_enable(device);
@@ -523,13 +654,13 @@ void usb_device_init(usb_peripheral_t* const device)
 	usb_controller_set_device_mode(device);
 
 	// Set interrupt threshold interval to 0
-	device->registers->usbcmd &= ~USB0_USBCMD_D_ITC_MASK;
+	device->reg->usbcmd &= ~USB0_USBCMD_D_ITC_MASK;
 
 	// Configure endpoint list address
-	device->registers->endpointlistaddr = (uint32_t)&device->queue_heads_device;
+	device->reg->endpointlistaddr = (uint32_t)&device->queue_heads_device;
 
 	// Enable interrupts
-	device->registers->usbintr =
+	device->reg->usbintr.all =
 		  USB0_USBINTR_D_UE
 		| USB0_USBINTR_D_UEE
 		| USB0_USBINTR_D_PCE
@@ -560,9 +691,11 @@ void usb_copy_setup(usb_setup_t* const dst, const volatile uint8_t* const src)
 	dst->length_h = src[7];
 }
 
-
-void usb_endpoint_init_without_descriptor(const usb_endpoint_t* const endpoint,
-		uint_fast16_t max_packet_size, usb_transfer_type_t transfer_type)
+/**
+ * Configure the simplified queue head for a given endpoint.
+ */
+void usb_configure_endpoint_queue_head(usb_endpoint_t *endpoint,
+		uint16_t max_packet_size, usb_transfer_type_t transfer_type)
 {
 	usb_endpoint_flush(endpoint);
 
@@ -598,31 +731,77 @@ void usb_endpoint_init_without_descriptor(const usb_endpoint_t* const endpoint,
 void usb_in_endpoint_enable_nak_interrupt(const usb_endpoint_t* const endpoint)
 {
 	uint8_t endpoint_number = usb_endpoint_number(endpoint->address);
-	endpoint->device->registers->endptnaken |= USB0_ENDPTNAKEN_EPTNE(1 << endpoint_number);
+	endpoint->device->reg->endptnaken |= USB0_ENDPTNAKEN_EPTNE(1 << endpoint_number);
 }
 
 
 void usb_in_endpoint_disable_nak_interrupt(const usb_endpoint_t* const endpoint)
 {
 	uint8_t endpoint_number = usb_endpoint_number(endpoint->address);
-	endpoint->device->registers->endptnaken &= ~USB0_ENDPTNAKEN_EPTNE(1 << endpoint_number);
+	endpoint->device->reg->endptnaken &= ~USB0_ENDPTNAKEN_EPTNE(1 << endpoint_number);
 }
 
 
-void usb_endpoint_init(const usb_endpoint_t* const endpoint)
+/**
+ * Tries to locate the descriptor for a given endpoint.
+ */
+usb_endpoint_descriptor_t *usb_endpoint_descriptor(usb_endpoint_t *endpoint)
+{
+	uintptr_t descriptor_address;
+	usb_configuration_descriptor_t *configuration = endpoint->device->active_configuration;
+
+	int32_t descriptor_remaining;
+
+	// If we're not configured, return NULL.
+	if (!configuration) {
+		return NULL;
+	}
+
+	// Start off with the address of the configuration descriptor, whose subordinate
+	// descriptor contains all of the endpoint descriptors.
+	descriptor_address = (uintptr_t)configuration;
+
+	// Iterate until we find a sentinel entry, which has zero length.
+    descriptor_remaining = configuration->total_length;
+	while (descriptor_remaining > 0) {
+		usb_descriptor_t *descriptor = (usb_descriptor_t *)descriptor_address;
+
+		bool is_endpoint = (descriptor->type == USB_DESCRIPTOR_TYPE_ENDPOINT);
+		bool index_matches = (descriptor->data[0] == endpoint->address);
+
+		// If we've found the endpoint, return it.
+		if (is_endpoint && index_matches) {
+			return (usb_endpoint_descriptor_t *)descriptor;
+		}
+
+		descriptor_remaining -= descriptor->length;
+		descriptor_address   += descriptor->length;
+	}
+
+	return NULL;
+}
+
+
+/**
+ *  Configures an endpoint object for use by configuring its dQH.
+ */
+void usb_endpoint_init(usb_endpoint_t *endpoint)
 {
 	usb_endpoint_flush(endpoint);
 
-	uint_fast16_t max_packet_size = endpoint->device->descriptor[7];
+	uint16_t max_packet_size = endpoint->device->device_descriptor->ep0_max_packet_size;
 	usb_transfer_type_t transfer_type = USB_TRANSFER_TYPE_CONTROL;
 
-	const uint8_t* const endpoint_descriptor = usb_endpoint_descriptor(endpoint);
-	if( endpoint_descriptor ) {
-		max_packet_size = usb_endpoint_descriptor_max_packet_size(endpoint_descriptor);
-		transfer_type = usb_endpoint_descriptor_transfer_type(endpoint_descriptor);
+	// If we have an endpoint descriptor, modify the defaults to reflect the
+	// data in the descriptor...
+	usb_endpoint_descriptor_t *endpoint_descriptor = usb_endpoint_descriptor(endpoint);
+	if (endpoint_descriptor) {
+		max_packet_size = endpoint_descriptor->max_packet_size;
+		transfer_type   = endpoint_descriptor->transfer_type;
 	}
 
-	usb_endpoint_init_without_descriptor(endpoint, max_packet_size, transfer_type);
+	// .. and use the parameters to configure the endpoint.
+	usb_configure_endpoint_queue_head(endpoint, max_packet_size, transfer_type);
 }
 
 
@@ -700,20 +879,32 @@ static void usb_check_for_transfer_events(usb_peripheral_t* const device)
 	}
 }
 
+void usb_handle_suspend(usb_peripheral_t *const device)
+{
+	pr_warning("Handling suspend thing.\n");
+
+	if (device->reg->usbsts.dc_suspend) {
+		pr_warning("USB: device suspended\n");
+	} else {
+		pr_warning("USB: not suspended?\n");
+	}
+}
+
+
 
 /**
  * Interrupt handler for device-mode USB interrupts.
  */
-void usb_device_isr(usb_peripheral_t* const device)
+void usb_device_isr(usb_peripheral_t *const device)
 {
-	const uint32_t status = usb_get_status(device);
+	const usb_interrupt_flags_t status = usb_get_status(device);
 
-	if( status == 0 ) {
+	if (status.all == 0 ) {
 		// Nothing to do.
 		return;
 	}
 
-	if( status & USB0_USBSTS_D_UI ) {
+	if (status.usb_interrupt) {
 		// USB:
 		// - Completed transaction transfer descriptor has IOC set.
 		// - Short packet detected.
@@ -725,26 +916,30 @@ void usb_device_isr(usb_peripheral_t* const device)
 		// TODO: Reset ignored ENDPTSETUPSTAT and ENDPTCOMPLETE flags?
 	}
 
-	if( status & USB0_USBSTS_D_SRI ) {
+	if (status.sof_received) {
 		// Start Of Frame received.
 	}
 
-	if( status & USB0_USBSTS_D_PCI ) {
+	if (status.port_change_detected) {
 		// Port change detect:
 		// Port controller entered full- or high-speed operational state.
+
+		pr_warning("port status change detected!\n");
 	}
 
-	if( status & USB0_USBSTS_D_SLI ) {
+	if (status.dc_suspend) {
 		// Device controller suspend.
-		//usb_handle_suspend();
+		usb_handle_suspend(device);
 	}
 
-	if( status & USB0_USBSTS_D_URI ) {
+	if (status.usb_reset_received) {
+		pr_warning("USB: host requesting USB reset?\n");
+
 		// USB reset received.
 		usb_bus_reset(device);
 	}
 
-	if( status & USB0_USBSTS_D_UEI ) {
+	if (status.system_error) {
 		// USB error:
 		// Completion of a USB transaction resulted in an error condition.
 		// Set along with USBINT if the TD on which the error interrupt
@@ -752,7 +947,7 @@ void usb_device_isr(usb_peripheral_t* const device)
 		// The device controller detects resume signalling only.
 	}
 
-	if( status & USB0_USBSTS_D_NAKI ) {
+	if (status.nak_interrupt) {
 		// Both the TX/RX endpoint NAK bit and corresponding TX/RX endpoint
 		// NAK enable bit are set.
 	}

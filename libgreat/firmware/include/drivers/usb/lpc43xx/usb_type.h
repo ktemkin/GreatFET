@@ -15,38 +15,282 @@
 // TODO: move things out of here so we don't super-pollute the namespace
 #include <libopencm3/lpc43xx/usb.h>
 
+typedef uint16_t char16_t;
+
 // Define the size of the host resources that should be preallocated.
-#define USB_ASYNC_LIST_SIZE            8
-#define USB_PERIODIC_LIST_SIZE         8
-#define USB_TOTAL_TRANSFER_DESCRIPTORS 8
+enum {
+	// Device mode constants.
+	USB_TOTAL_QUEUE_HEADS = 12,
+
+	// Host mode constants.
+	USB_ASYNCHRONOUS_LIST_SIZE = 8,
+	USB_PERIODIC_LIST_SIZE = 8,
+	USB_TD_POOL_SIZE = 8,
+};
 
 
-typedef struct ATTR_PACKED {
-	uint8_t request_type;
+// Maximum packet sizes for various USB speeds.
+enum {
+	USB_MAXIMUM_PACKET_SIZE_HIGH_SPEED = 512,
+	USB_MAXIMUM_PACKET_SIZE_FULL_SPEED = 64,
+};
+
+
+//
+// Data structures that are included in USB descriptors.
+//
+
+// USB device version
+typedef union {
+	uint16_t bcd;
+	struct {
+		uint8_t high_digit;
+		uint8_t low_digit;
+	};
+} usb_bcd_version_t;
+
+
+//
+// Structures for each of the relevant USB descriptors:
+//
+
+/**
+ * Structure describing an arbitrary USB descriptor.
+ */
+typedef struct {
+	uint8_t length;
+	uint8_t type;
+	uint8_t data[];
+} ATTR_PACKED usb_descriptor_t;
+
+
+/**
+ *  Device descriptor.
+ */
+typedef struct {
+	uint8_t length;
+	uint8_t type;
+
+	// USB standard to which this device adheres.
+	usb_bcd_version_t usb_version;
+
+	// Information about the device's class, if applicable.
+	// Describes if the device can be handled by standard drivers.
+	uint8_t device_class;
+	uint8_t device_subclass;
+	uint8_t device_protocol;
+
+	// The maximum packet size on the control endpoint.
+	uint8_t ep0_max_packet_size;
+
+	// Information that describes the device's identity.
+	uint16_t vendor_id;
+	uint16_t product_id;
+
+	// Release version of the device.
+	usb_bcd_version_t device_version;
+
+	// String descriptors that help to identify the device to the user.
+	uint8_t manufacturer_string_index;
+	uint8_t product_string_index;
+	uint8_t serial_string_index;
+
+	// The number of total configurations.
+	uint8_t configuration_count;
+
+} ATTR_PACKED usb_device_descriptor_t;
+
+
+/**
+ * String descriptor.
+ */
+typedef struct {
+	uint8_t length;
+	uint8_t type;
+
+	// The body of the relevant UTF-16/LE string.
+	char16_t string[];
+
+} ATTR_PACKED usb_string_descriptor_t;
+
+
+/**
+ * Device qualifier descriptor -- describes information about how the device
+ * would differ if it were operating in another speed. See 9.6.2 in the USB spec.
+ */
+typedef struct {
+	uint8_t length;
+	uint8_t type;
+
+	// USB standard to which this device adheres.
+	usb_bcd_version_t usb_version;
+
+	// Information about the device's class, if applicable.
+	// Describes if the device can be handled by standard drivers.
+	uint8_t device_class;
+	uint8_t device_subclass;
+	uint8_t device_protocol;
+
+	// The maximum packet size on the control endpoint.
+	uint8_t ep0_max_packet_size;
+
+	// The number of total configurations.
+	uint8_t configuration_count;
+
+	// For future use. (Spooky!)
+	uint8_t reserved;
+
+} ATTR_PACKED usb_device_qualifier_descriptor_t;
+
+
+/**
+ * Macro that allows us to specify our current draw.
+ */
+#define CURRENT_DRAW_IN_MILLIAMPS(x) (x >> 1)
+
+
+/**
+ * Structure describing a USB configuration.
+ */
+typedef struct {
+	uint8_t length;
+	uint8_t type;
+
+	// A configuration descriptor can have attached subordinate descriptors.
+	// Provide the total lengh of these descriptors.
+	uint16_t total_length;
+
+	// The total number of interfaces that belong to this configuration.
+	uint8_t interface_count;
+
+	// The "value" for this given configuration, which effecitvely is an
+	// _non-zero_ index that identifies the given configuration.
+	uint8_t value;
+
+	// Index of the string that documents the configuration.
+	uint8_t string_index;
+
+	// The attributes array for the descriptor.
+	struct {
+		uint8_t               : 5;
+		uint8_t remote_wakeup : 1;
+		uint8_t self_powered  : 1;
+		uint8_t bus_powered   : 1; // must always be set to one
+	};
+
+	// The maximum current draw in this configuration, in 2mA units--
+	// so 50 = 100mA.
+	uint8_t current_consumption;
+
+} ATTR_PACKED usb_configuration_descriptor_t;
+
+
+/**
+ * Structure describing a USB configuration.
+ */
+typedef struct {
+	uint8_t length;
+	uint8_t type;
+
+	// The interface number described by this descriptor.
+	uint8_t number;
+
+	// The total number of endpoints that compose this interface.
+	uint8_t endpoint_count;
+
+	// Information about the device's class, if applicable.
+	// Describes if the interface can be handled by standard drivers.
+	//
+	// Primarily used when the device's equivalent fields are all zero,
+	// which indicates a composite device, where each interface can be bound
+	// to its own driver.
+	uint8_t device_class;
+	uint8_t device_subclass;
+	uint8_t device_protocol;
+
+	// Index of the string that documents the interface.
+	uint8_t string_index;
+
+} ATTR_PACKED usb_interface_descriptor_t;
+
+
+/**
+ * Structure describing a USB endpoint.
+ */
+typedef struct {
+	uint8_t length;
+	uint8_t type;
+
+	// The endpoint's address attributes.
+	union {
+		struct {
+			uint8_t number    : 4;
+			uint8_t           : 3;
+			uint8_t direction : 1;
+		};
+		uint8_t address;
+	};
+
+	// The core properties of the endpoint.
+	struct {
+		uint8_t transfer_type        : 2;
+		uint8_t synchronization_type : 2;
+		uint8_t usage_type           : 2;
+		uint8_t reserved             : 2;
+	};
+
+	// The largest amount of data that can be fit into a
+	// packet.
+	uint16_t max_packet_size;
+
+	// For periodic endpoints (interrupt/isochronous), information
+	// about the
+	uint8_t interval;
+
+
+} ATTR_PACKED usb_endpoint_descriptor_t;
+
+
+/**
+ * Structure that describes a USB setup packet.
+ */
+typedef struct {
+	union {
+		uint8_t request_type;
+		struct {
+			uint32_t direction : 1;
+			uint32_t type : 2;
+			uint32_t recipient : 5;
+		};
+	};
+
 	uint8_t request;
 	union {
+		uint16_t value;
 		struct {
 			uint8_t value_l;
 			uint8_t value_h;
 		};
-		uint16_t value;
 	};
 	union {
+		uint16_t index;
 		struct {
 			uint8_t index_l;
 			uint8_t index_h;
 		};
-		uint16_t index;
 	};
 	union {
+		uint16_t length;
 		struct {
 			uint8_t length_l;
 			uint8_t length_h;
 		};
-		uint16_t length;
 	};
-} usb_setup_t;
+} ATTR_PACKED usb_setup_t;
 
+/**
+ * Numbers for the standard USB requests.
+ */
 typedef enum {
 	USB_STANDARD_REQUEST_GET_STATUS = 0,
 	USB_STANDARD_REQUEST_CLEAR_FEATURE = 1,
@@ -130,7 +374,6 @@ typedef struct {
 	const uint32_t number;
 	const usb_speed_t speed;
 } usb_configuration_t;
-
 
 
 // From the EHCI specification, section 3.5
@@ -230,38 +473,61 @@ typedef struct {
 } __attribute__((packed, aligned(64))) ehci_queue_head_t;
 #pragma GCC diagnostic pop
 
+typedef struct usb_peripheral usb_peripheral_t;
+
+typedef void (*usb_configuration_changed_callback_t)(usb_peripheral_t *callback);
 
 
-typedef struct {
+/**
+ * Structure describing a dual-mode USB driver that follows the standard
+ * EHCI model (host mode) or the common simplified EHCI model (devide mode).
+ */
+struct usb_peripheral {
+
+	// A reference to the platform-specific collection of registers
+	// for the given platform.
+	volatile usb_register_block_t *reg;
+
+	/* FIXME: get rid of this! */
+	uint8_t controller;
+
+	// Stores whether the USB controller is in host or device mode.
 	usb_controller_mode_t mode;
-	const uint8_t controller;
-
-	volatile usb_register_block_t *registers;
 
 	union {
-		// Device mode fields.
-		// TODO: get e.g. descriptor things out of here!
-		struct {
-			const uint8_t* const descriptor;
-			uint8_t** descriptor_strings;
-			const uint8_t* const qualifier_descriptor;
-			usb_configuration_t* (*configurations)[];
-			const usb_configuration_t* configuration;
-			usb_queue_head_t queue_heads_device[12] ATTR_ALIGNED(2048);
 
-			uint32_t last_suspend_time;
+		// Device mode fields.
+		struct {
+
+			// References to each of the relevant device descriptors.
+			usb_device_descriptor_t *device_descriptor;
+			usb_string_descriptor_t **string_descriptors;
+			usb_string_descriptor_t *language_descriptors;
+			usb_device_qualifier_descriptor_t *device_qualifier_descriptor;
+
+			// Collections of configuration descriptors for each of the configuration.
+			usb_configuration_descriptor_t **full_speed_configurations;
+			usb_configuration_descriptor_t **high_speed_configurations;
+
+			// A pointer to the descriptor for the active configuration.
+			usb_configuration_descriptor_t *active_configuration;
+
+			// A callback executed each time the configuration is changed.
+			usb_configuration_changed_callback_t configuration_changed_callback;
+
+			// Collection of USB device Queue Heads (dQH).
+			usb_queue_head_t queue_heads_device[USB_TOTAL_QUEUE_HEADS] ATTR_ALIGNED(2048);
 		};
 
 		// Host mode fields.
 		struct {
 
-
 			// Head for the asynchronous queue.
 			ehci_queue_head_t async_queue_head;
-			ehci_queue_head_t periodic_queue_head;  // TODO: rename me, I'm not really a head?
 
-			// TODO: abstract these counts?
-			ehci_link_t periodic_list[8];
+			// TODO: rename me, I'm not really a head?
+			ehci_queue_head_t periodic_queue_head;
+			ehci_link_t periodic_list[USB_PERIODIC_LIST_SIZE];
 
 			// TODO: support Isochronous trasfers
 
@@ -269,18 +535,32 @@ typedef struct {
 			ehci_link_t pending_transfers;
 		};
 	};
-} usb_peripheral_t;
+};
 
+
+/**
+ * Structure representing a USB endpoint, from the driver's perspective.
+ */
 typedef struct usb_endpoint_t usb_endpoint_t;
 struct usb_endpoint_t {
 	usb_setup_t setup;
-	uint8_t buffer[8];	// Buffer for use during IN stage.
-	const uint_fast8_t address;
-	usb_peripheral_t* device;
-	usb_endpoint_t* const in;
-	usb_endpoint_t* const out;
+
+	// The endpoint's address attributes.
+	union {
+		struct {
+			uint8_t number    : 7;
+			uint8_t direction : 1;
+		};
+		uint8_t address;
+	};
+
+	usb_peripheral_t *device;
+
+	usb_endpoint_t *in;
+	usb_endpoint_t *out;
+
 	void (*setup_complete)(usb_endpoint_t* const endpoint);
 	void (*transfer_complete)(usb_endpoint_t* const endpoint);
 };
 
-#endif//__USB_TYPE_H__
+#endif

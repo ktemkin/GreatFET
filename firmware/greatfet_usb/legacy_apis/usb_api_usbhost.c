@@ -16,7 +16,6 @@
 #include <drivers/usb/lpc43xx/usb_type.h>
 
 #include <drivers/usb/lpc43xx/usb_standard_request.h>
-#include "../usb_descriptor.h"
 #include "../usb_device.h"
 #include "../usb_endpoint.h"
 #include <drivers/usb/lpc43xx/usb_request.h>
@@ -166,7 +165,7 @@ static uint32_t get_status_register(uint16_t index,
 		const usb_peripheral_t* const host)
 {
 	switch(index) {
-		case GET_PORTSC1:      return host->registers->portsc1;
+		case GET_PORTSC1:      return host->reg->portsc1;
 		case GET_READ_STATUS:  return usbhost_get_read_status();
 		case GET_WRITE_STATUS: return usbhost_get_write_status();
 	}

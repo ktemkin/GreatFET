@@ -26,7 +26,6 @@
 #include "glitchkit.h"
 
 #include <rom_iap.h>
-#include "usb_descriptor.h"
 #include "usb_device.h"
 #include "usb_endpoint.h"
 
@@ -36,9 +35,10 @@
 
 #include <drivers/memory/allocator.h>
 
+extern char serial_number_ascii[USB_DESCRIPTOR_STRING_SERIAL_LEN + 1];
+
 
 void init_usb0(void) {
-	usb_set_descriptor_by_serial_number();
 	usb_peripheral_reset(&usb_peripherals[0]);
 	usb_device_init(&usb_peripherals[0]);
 

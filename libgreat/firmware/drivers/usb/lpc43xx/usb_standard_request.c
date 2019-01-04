@@ -4,318 +4,263 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
+#include <debug.h>
 
-#include <drivers/usb/lpc43xx/usb_standard_request.h>
+// FIXME: move this to a standard USB library
 
 #include <drivers/usb/lpc43xx/usb.h>
 #include <drivers/usb/lpc43xx/usb_type.h>
 #include <drivers/usb/lpc43xx/usb_queue.h>
 
-const uint8_t* usb_endpoint_descriptor(
-	const usb_endpoint_t* const endpoint
-) {
-	const usb_configuration_t* const configuration = endpoint->device->configuration;
-	if( configuration ) {
-		const uint8_t* descriptor = configuration->descriptor;
-		while( descriptor[0] != 0 ) {
-			if( descriptor[1] == USB_DESCRIPTOR_TYPE_ENDPOINT ) {
-				if( descriptor[2] == endpoint->address ) {
-					return descriptor;
-				}
-			}
-			descriptor += descriptor[0];
-		}
-	}
-	
-	return 0;
-}
-	
-uint_fast16_t usb_endpoint_descriptor_max_packet_size(
-	const uint8_t* const endpoint_descriptor
-) {
-	return (endpoint_descriptor[5] << 8) | endpoint_descriptor[4];
-}
+#include <drivers/usb/lpc43xx/usb_standard_request.h>
 
-usb_transfer_type_t usb_endpoint_descriptor_transfer_type(
-	const uint8_t* const endpoint_descriptor
-) {
-	return (endpoint_descriptor[3] & 0x3);
-}
+enum {
+	USB_MAX_STRING_LEN = 64,
+};
 
-void (*usb_configuration_changed_cb)(usb_peripheral_t* const) = NULL;
+uint8_t usb_string_buffer[(USB_MAX_STRING_LEN * 2) + sizeof(usb_string_descriptor_t)];
 
-void usb_set_configuration_changed_cb(
-	void (*callback)(usb_peripheral_t* const)
-) {
-	usb_configuration_changed_cb = callback;
-}
 
-bool usb_set_configuration(
-	usb_peripheral_t* const device,
-	const uint_fast8_t configuration_number
-) {
+/**
+ * Handler for the setup stage of a standard request.
+ */
+typedef usb_request_status_t (*usb_request_handler_t)(usb_endpoint_t *const endpoint);
 
-	const usb_configuration_t* new_configuration = 0;
-	if( configuration_number != 0 ) {
-		
-		// Locate requested configuration.
-		if( device->configurations ) {
-			usb_configuration_t** configurations = *(device->configurations);
-			uint32_t i = 0;
-			const usb_speed_t usb_speed_current = usb_speed(device);
-			while( configurations[i] ) {
-				if( (configurations[i]->speed == usb_speed_current) &&
-				    (configurations[i]->number == configuration_number) ) {
-					new_configuration = configurations[i];
-					break;
-				}
-				i++;
-			}
-		}
 
-		// Requested configuration not found: request error.
-		if( new_configuration == 0 ) {
-			return false;
-		}
-	}
-	
-	if( new_configuration != device->configuration ) {
-		// Configuration changed.
-		device->configuration = new_configuration;
+/**
+ * Scheudles a response to a GET_DESCRIPTOR request.
+ *
+ * @param descriptor The descriptor to send as our reply. NULLs are accepatable, but will
+ *		generate a STALL return value.
+ * @return A request status; _OK on success or _STALL on failure.
+ */
+static usb_request_status_t usb_send_descriptor(usb_endpoint_t* const endpoint, usb_descriptor_t *descriptor)
+{
+	uint32_t length_to_send;
+
+	// If we don't have a valid descriptor, stall.
+	if (!descriptor) {
+		return USB_REQUEST_STATUS_STALL;
 	}
 
-	if (usb_configuration_changed_cb)
-		usb_configuration_changed_cb(device);
+	// Initially, assume we're going to send the full descriptor.
+	length_to_send = descriptor->length;
 
-	return true;
-}
-	
-static usb_request_status_t usb_send_descriptor(
-	usb_endpoint_t* const endpoint,
-	const uint8_t* const descriptor_data
-) {
-	const uint32_t setup_length = endpoint->setup.length;
-	uint32_t descriptor_length = descriptor_data[0];
-	if( descriptor_data[1] == USB_DESCRIPTOR_TYPE_CONFIGURATION ) {
-		descriptor_length = (descriptor_data[3] << 8) | descriptor_data[2];
+	// If this is a configuration descriptor, this descriptor can contain subordinate
+	// descriptors. Accordingly, we'll use its "total length" field
+	if (descriptor->type == USB_DESCRIPTOR_TYPE_CONFIGURATION) {
+		usb_configuration_descriptor_t *config = (void *)descriptor;
+		length_to_send = config->total_length;
 	}
+
+	// If the user has requested less than the maximum we have to send, truncate.
+	if (endpoint->setup.length < length_to_send) {
+		length_to_send = endpoint->setup.length;
+	}
+
 	// We cast the const away but this shouldn't be a problem as this is a write transfer
-	usb_transfer_schedule_block(
-		endpoint->in,
-		(uint8_t* const) descriptor_data,
-	 	(setup_length > descriptor_length) ? descriptor_length : setup_length,
-		NULL, NULL
-	);
+	usb_transfer_schedule_block(endpoint->in, descriptor, length_to_send, NULL, NULL);
 	usb_transfer_schedule_ack(endpoint->out);
+
 	return USB_REQUEST_STATUS_OK;
 }
 
-static usb_request_status_t usb_send_descriptor_string(
-	usb_endpoint_t* const endpoint
-) {
-	uint_fast8_t index = endpoint->setup.value_l;
-	for( uint_fast8_t i=0; endpoint->device->descriptor_strings[i] != 0; i++ ) {
-		if( i == index ) {
-			return usb_send_descriptor(endpoint, endpoint->device->descriptor_strings[i]);
+
+
+/**
+ *
+ */
+static usb_request_status_t usb_send_descriptor_string(usb_endpoint_t* const endpoint)
+{
+	uint8_t index = endpoint->setup.value_l;
+
+	// Special case: language strings are sent directly.
+	if (index == 0) {
+		return usb_send_descriptor(endpoint, (usb_descriptor_t *)endpoint->device->language_descriptors);
+	}
+
+	// Search each of the string descriptors associated with the device.
+	for (uint8_t i = 1; endpoint->device->string_descriptors[i] != 0; i++) {
+
+		// If this is the string descriptor we're looking for, send it.
+		if (i == index) {
+			usb_descriptor_t *descriptor = endpoint->device->string_descriptors[i];
+			return usb_send_descriptor(endpoint, descriptor);
 		}
 	}
 
 	return USB_REQUEST_STATUS_STALL;
 }
 
-static usb_request_status_t usb_send_descriptor_config(
-	usb_endpoint_t* const endpoint,
-	usb_speed_t speed,
-	const uint8_t config_num
-) {
-	usb_configuration_t** config = *(endpoint->device->configurations);
-	unsigned int i = 0;
-	for( ; *config != NULL; config++ ) {
-		if( (*config)->speed == speed) {
-			if (i == config_num) {
-				return usb_send_descriptor(endpoint, (*config)->descriptor);
-			} else {
-				i++;
-			}
-		}
+
+/**
+ *
+ */
+static usb_request_status_t usb_standard_request_get_descriptor(usb_endpoint_t* const endpoint)
+{
+	usb_descriptor_t *descriptor = NULL;
+
+	uint8_t descriptor_type  = endpoint->setup.value_h;
+	uint8_t descriptor_index = endpoint->setup.value_l;
+
+	switch (descriptor_type) {
+		case USB_DESCRIPTOR_TYPE_DEVICE:
+			descriptor = (void *)endpoint->device->device_descriptor;
+			break;
+
+		case USB_DESCRIPTOR_TYPE_CONFIGURATION:
+			descriptor = (void *)usb_find_configuration_descriptor(endpoint->device, descriptor_index);
+			break;
+
+		case USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER:
+			descriptor = (void *)endpoint->device->device_qualifier_descriptor;
+			break;
+
+		case USB_DESCRIPTOR_TYPE_OTHER_SPEED_CONFIGURATION:
+			descriptor = (void *)usb_find_other_speed_configuration_descriptor(endpoint->device, descriptor_index);
+			break;
+
+		case USB_DESCRIPTOR_TYPE_STRING:
+			return usb_send_descriptor_string(endpoint);
+
+		case USB_DESCRIPTOR_TYPE_INTERFACE:
+		case USB_DESCRIPTOR_TYPE_ENDPOINT:
+			// FIXME: implement these!
+
+		default:
+			return USB_REQUEST_STATUS_STALL;
 	}
-	return USB_REQUEST_STATUS_STALL;
+
+	return usb_send_descriptor(endpoint, descriptor);
 }
 
-static usb_request_status_t usb_standard_request_get_descriptor_setup(
-	usb_endpoint_t* const endpoint
-) {
-	switch( endpoint->setup.value_h ) {
-	case USB_DESCRIPTOR_TYPE_DEVICE:
-		return usb_send_descriptor(endpoint, endpoint->device->descriptor);
-		
-	case USB_DESCRIPTOR_TYPE_CONFIGURATION:
-		// TODO: Duplicated code. Refactor.
-		if( usb_speed(endpoint->device) == USB_SPEED_HIGH ) {
-			return usb_send_descriptor_config(endpoint, USB_SPEED_HIGH, endpoint->setup.value_l);
-		} else {
-			return usb_send_descriptor_config(endpoint, USB_SPEED_FULL, endpoint->setup.value_l);
-		}
-	
-	case USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER:
-		return usb_send_descriptor(endpoint, endpoint->device->qualifier_descriptor);
 
-	case USB_DESCRIPTOR_TYPE_OTHER_SPEED_CONFIGURATION:
-		// TODO: Duplicated code. Refactor.
-		if( usb_speed(endpoint->device) == USB_SPEED_HIGH ) {
-			return usb_send_descriptor_config(endpoint, USB_SPEED_FULL, endpoint->setup.value_l);
-		} else {
-			return usb_send_descriptor_config(endpoint, USB_SPEED_HIGH, endpoint->setup.value_l);
-		}
-	
-	case USB_DESCRIPTOR_TYPE_STRING:
-		return usb_send_descriptor_string(endpoint);
-		
-	case USB_DESCRIPTOR_TYPE_INTERFACE:
-	case USB_DESCRIPTOR_TYPE_ENDPOINT:
-	default:
-		return USB_REQUEST_STATUS_STALL;
-	}
-}
-
-static usb_request_status_t usb_standard_request_get_descriptor(
-	usb_endpoint_t* const endpoint,
-	const usb_transfer_stage_t stage
-) {
-	switch( stage ) {
-	case USB_TRANSFER_STAGE_SETUP:
-		return usb_standard_request_get_descriptor_setup(endpoint);
-		
-	case USB_TRANSFER_STAGE_DATA:
-	case USB_TRANSFER_STAGE_STATUS:
-		return USB_REQUEST_STATUS_OK;
-
-	default:
-		return USB_REQUEST_STATUS_STALL;
-	}
-}
-
-/*********************************************************************/
-
-static usb_request_status_t usb_standard_request_set_address_setup(
-	usb_endpoint_t* const endpoint
-) {
+static usb_request_status_t usb_standard_request_set_address(usb_endpoint_t* const endpoint)
+{
 	usb_set_address_deferred(endpoint->device, endpoint->setup.value_l);
 	usb_transfer_schedule_ack(endpoint->in);
 	return USB_REQUEST_STATUS_OK;
 }
 
-static usb_request_status_t usb_standard_request_set_address(
-	usb_endpoint_t* const endpoint,
-	const usb_transfer_stage_t stage
-) {
-	switch( stage ) {
-	case USB_TRANSFER_STAGE_SETUP:
-		return usb_standard_request_set_address_setup(endpoint);
-		
-	case USB_TRANSFER_STAGE_DATA:
-	case USB_TRANSFER_STAGE_STATUS:
-		/* NOTE: Not necessary to set address here, as DEVICEADR.USBADRA bit
-		 * will cause controller to automatically perform set address
-		 * operation on IN ACK.
-		 */
-		return USB_REQUEST_STATUS_OK;
-		
-	default:
-		return USB_REQUEST_STATUS_STALL;
-	}
-}
 
-/*********************************************************************/
-
-static usb_request_status_t usb_standard_request_set_configuration_setup(
-	usb_endpoint_t* const endpoint
-) {
+static usb_request_status_t usb_standard_request_set_configuration(usb_endpoint_t* const endpoint)
+{
 	const uint8_t usb_configuration = endpoint->setup.value_l;
-	if( usb_set_configuration(endpoint->device, usb_configuration) ) {
-		if( usb_configuration == 0 ) {
-			// TODO: Should this be done immediately?
-			usb_set_address_immediate(endpoint->device, 0);
-		}
-		usb_transfer_schedule_ack(endpoint->in);
-		return USB_REQUEST_STATUS_OK;
-	} else {
+
+	// Attempt to apply the configuration provided.
+	int rc = usb_set_configuration(endpoint->device, usb_configuration);
+
+	// If we couldn't apply the relevant configuration, stall.
+	if (rc) {
 		return USB_REQUEST_STATUS_STALL;
 	}
+
+	// The original version of this code autoamtically assigned the device a zero address
+	// when it was de-configured.
+	usb_transfer_schedule_ack(endpoint->in);
+	return USB_REQUEST_STATUS_OK;
 }
 
-static usb_request_status_t usb_standard_request_set_configuration(
-	usb_endpoint_t* const endpoint,
-	const usb_transfer_stage_t stage
-) {
-	switch( stage ) {
-	case USB_TRANSFER_STAGE_SETUP:
-		return usb_standard_request_set_configuration_setup(endpoint);
-		
-	case USB_TRANSFER_STAGE_DATA:
-	case USB_TRANSFER_STAGE_STATUS:
-		return USB_REQUEST_STATUS_OK;
-		
-	default:
+
+/**
+ *
+ */
+static usb_request_status_t usb_standard_request_get_configuration(usb_endpoint_t* const endpoint)
+{
+	static uint8_t configuration_index = 0;
+
+	// If this isn't exactly the one byte needed to communicate
+	// a configuration index, fail out.
+	if (endpoint->setup.length != sizeof(configuration_index) ) {
 		return USB_REQUEST_STATUS_STALL;
 	}
+
+	// If the device is currently configured, transmit its number.
+	if (endpoint->device->active_configuration) {
+		configuration_index = endpoint->device->active_configuration->value;
+	}
+
+	usb_transfer_schedule_block(endpoint->in, &configuration_index, sizeof(configuration_index), NULL, NULL);
+	usb_transfer_schedule_ack(endpoint->out);
+
+	return USB_REQUEST_STATUS_OK;
 }
 
-/*********************************************************************/
 
-static usb_request_status_t usb_standard_request_get_configuration_setup(
-	usb_endpoint_t* const endpoint
-) {
-	if( endpoint->setup.length == 1 ) {
-		endpoint->buffer[0] = 0;
-		if( endpoint->device->configuration ) {
-			endpoint->buffer[0] = endpoint->device->configuration->number;
-		}
-		usb_transfer_schedule_block(endpoint->in, &endpoint->buffer, 1, NULL, NULL);
-		usb_transfer_schedule_ack(endpoint->out);
-		return USB_REQUEST_STATUS_OK;
-	} else {
+/**
+ *
+ */
+static usb_request_status_t usb_standard_request_get_status(usb_endpoint_t* const endpoint)
+{
+	static uint16_t status = 0;
+
+	// If this isn't exactly the one byte needed to communicate
+	// a configuration index, fail out.
+	if (endpoint->setup.length != sizeof(status)) {
 		return USB_REQUEST_STATUS_STALL;
 	}
+
+	usb_transfer_schedule_block(endpoint->in, &status, sizeof(status), NULL, NULL);
+	usb_transfer_schedule_ack(endpoint->out);
+
+	return USB_REQUEST_STATUS_OK;
 }
 
-static usb_request_status_t usb_standard_request_get_configuration(
-	usb_endpoint_t* const endpoint,
-	const usb_transfer_stage_t stage
-) {
-	switch( stage ) {
-	case USB_TRANSFER_STAGE_SETUP:
-		return usb_standard_request_get_configuration_setup(endpoint);
-		
-	case USB_TRANSFER_STAGE_DATA:
-	case USB_TRANSFER_STAGE_STATUS:
-		return USB_REQUEST_STATUS_OK;
 
-	default:
-		return USB_REQUEST_STATUS_STALL;
-	}
+/**
+ * Default handlers for USB requests we don't handle; always stalls.
+ */
+static usb_request_status_t usb_standard_request_unhandled(usb_endpoint_t* const endpoint)
+{
+	(void)endpoint;
+	return USB_REQUEST_STATUS_STALL;
 }
 
-/*********************************************************************/
 
-usb_request_status_t usb_standard_request(
-	usb_endpoint_t* const endpoint,
-	const usb_transfer_stage_t stage
-) {
-	switch( endpoint->setup.request ) {
-	case USB_STANDARD_REQUEST_GET_DESCRIPTOR:
-		return usb_standard_request_get_descriptor(endpoint, stage);
-	
-	case USB_STANDARD_REQUEST_SET_ADDRESS:
-		return usb_standard_request_set_address(endpoint, stage);
-		
-	case USB_STANDARD_REQUEST_SET_CONFIGURATION:
-		return usb_standard_request_set_configuration(endpoint, stage);
-		
-	case USB_STANDARD_REQUEST_GET_CONFIGURATION:
-		return usb_standard_request_get_configuration(endpoint, stage);
+/**
+ *
+ */
+static usb_request_handler_t usb_get_handler_for_standard_request(uint8_t request)
+{
+	// If we support the given request, return an appropriate handler.
+	switch (request) {
+		case USB_STANDARD_REQUEST_GET_STATUS:
+			return usb_standard_request_get_status;
+		case USB_STANDARD_REQUEST_GET_DESCRIPTOR:
+			return usb_standard_request_get_descriptor;
+		case USB_STANDARD_REQUEST_SET_ADDRESS:
+			return usb_standard_request_set_address;
+		case USB_STANDARD_REQUEST_SET_CONFIGURATION:
+			return usb_standard_request_set_configuration;
+		case USB_STANDARD_REQUEST_GET_CONFIGURATION:
+			return usb_standard_request_get_configuration;
+	}
 
-	default:
+	return usb_standard_request_unhandled;
+}
+
+/**
+ */
+usb_request_status_t usb_standard_request(usb_endpoint_t* const endpoint,
+	const usb_transfer_stage_t stage)
+{
+	uint8_t request = endpoint->setup.request;
+
+	// Try to find the handler for the relevant request.
+	usb_request_handler_t handler =
+		usb_get_handler_for_standard_request(request);
+
+	// If we couldn't find a handler, stall.
+	if (!handler) {
 		return USB_REQUEST_STATUS_STALL;
 	}
+
+	// If this is the setup stage, execute the core standard handler.
+	if (stage == USB_TRANSFER_STAGE_SETUP) {
+		return handler(endpoint);
+	}
+
+	// Assuming we have a handler, ACK the relevant request.
+	return USB_REQUEST_STATUS_OK;
 }
