@@ -38,6 +38,7 @@ static int gpio_verb_set_up_gpio_pin(struct command_transaction *trans)
 	// If this port/pin doesn't correspond to a valid physical pin,
 	// fail out.
 	if ((scu_group == 0xff) || (scu_pin == 0xff)) {
+		pr_warning("gpio: tried to control a pin not routed to a header!");
 		return EINVAL;
 	}
 

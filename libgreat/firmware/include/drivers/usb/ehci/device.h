@@ -2,15 +2,15 @@
  * This file is part of GreatFET
  */
 
-#ifndef __USB_H__
-#define __USB_H__
+#ifndef __USB_DEVICE_H__
+#define __USB_DEVICE_H__
 
 // TODO: Refactor to support high performance operations without having to
 // expose usb_transfer_descriptor_t. Or usb_endpoint_prime(). Or, or, or...
-#include <libopencm3/lpc43xx/usb.h>
 #include <libopencm3/cm3/vector.h>
 
-#include "usb_type.h"
+#include <drivers/usb/types.h>
+#include <drivers/usb/ehci/types.h>
 
 #define NUM_USB_CONTROLLERS 2
 #define NUM_USB1_ENDPOINTS 4
@@ -20,9 +20,11 @@ extern usb_peripheral_t usb_peripherals[2];
 
 void usb_peripheral_reset();
 
-void usb_bus_reset(
-	usb_peripheral_t* const device
-);
+/**
+ * Handles a host-issued USB bus reset -- effectively setting up the device controller
+ * for a new burst of communications.
+ */
+void usb_handle_bus_reset(usb_peripheral_t *const device);
 
 usb_queue_head_t* usb_queue_head(
 	const uint_fast8_t endpoint_address,
@@ -63,6 +65,22 @@ void usb_controller_reset(
 void usb_controller_run(
 	const usb_peripheral_t* const device
 );
+
+
+/**
+ * Disables the ability for the given port to connect at high speed.
+ *
+ * Useful for debugging high-speed-specific modes or viewing things
+ * with more primitive USB analyzers.
+ */
+void usb_prevent_high_speed(usb_peripheral_t *device);
+
+/**
+ * Cancels the effects of a previous usb_prevent_high_speed(), re-enabling
+ * the abiltity for a device to connect at high speeds.
+ */
+void usb_allow_high_speed(usb_peripheral_t *device);
+
 
 void usb_run(
 	usb_peripheral_t* const device

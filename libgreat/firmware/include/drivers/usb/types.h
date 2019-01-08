@@ -1,21 +1,30 @@
 /*
- * This file is part of GreatFET
+ * This file is part of libgreat.
+ *
+ * Non-HCI-specific HCI types.
  */
-
-#ifndef __USB_TYPE_H__
-#define __USB_TYPE_H__
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <toolchain.h>
 
-// TODO: should this be platform-registers or etc?
-#include <drivers/usb/lpc43xx/usb_registers.h>
+#include <drivers/usb/ehci/platform.h>
 
-// TODO: move things out of here so we don't super-pollute the namespace
-#include <libopencm3/lpc43xx/usb.h>
+#ifndef __USB_TYPES_H__
+#define __USB_TYPES_H__
 
+/**
+ * Stand-in for uchar.h
+ */
 typedef uint16_t char16_t;
+
+
+/**
+ * Generic opaque data structures.
+ */
+typedef struct usb_endpoint usb_endpoint_t;
+typedef struct usb_peripheral usb_peripheral_t;
+
 
 // Define the size of the host resources that should be preallocated.
 enum {
@@ -44,8 +53,8 @@ enum {
 typedef union {
 	uint16_t bcd;
 	struct {
-		uint8_t high_digit;
 		uint8_t low_digit;
+		uint8_t high_digit;
 	};
 } usb_bcd_version_t;
 
@@ -114,6 +123,27 @@ typedef struct {
 } ATTR_PACKED usb_string_descriptor_t;
 
 
+/**
+ * List elements for a sparse list of USB string descriptors.
+ */
+typedef struct {
+	uint8_t index;
+	usb_string_descriptor_t *descriptor;
+} usb_string_descriptor_list_entry;
+
+
+/**
+ * Macros for simple defintions of USB string descriptors.
+ */
+#define USB_STRING_DESCRIPTOR_RAW(str, size) { \
+	.length = sizeof(usb_string_descriptor_t) + size, \
+	.type   = USB_DESCRIPTOR_TYPE_STRING, \
+	.string = str \
+}
+#define USB_STRING_DESCRIPTOR(str)                 USB_STRING_DESCRIPTOR_RAW(u ## str, (sizeof(str) - 1) * 2)
+#define USB_SUPPORTED_LANGUAGES_DESCRIPTOR(langs)  USB_STRING_DESCRIPTOR_RAW({ langs }, sizeof(uint16_t))
+
+;
 /**
  * Device qualifier descriptor -- describes information about how the device
  * would differ if it were operating in another speed. See 9.6.2 in the USB spec.
@@ -194,6 +224,9 @@ typedef struct {
 
 	// The interface number described by this descriptor.
 	uint8_t number;
+
+	// Alternate setting for this interface; if applicable.
+	uint8_t alternate_setting;
 
 	// The total number of endpoints that compose this interface.
 	uint8_t endpoint_count;
@@ -356,7 +389,6 @@ typedef enum {
 	USB_SPEED_SUPER = 3,
 } usb_speed_t;
 
-
 typedef enum {
   USB_CONTROLLER_MODE_DEVICE = 0,
   USB_CONTROLLER_MODE_HOST = 1
@@ -369,180 +401,10 @@ typedef enum {
 } usb_token_t;
 
 
-typedef struct {
-	const uint8_t* const descriptor;
-	const uint32_t number;
-	const usb_speed_t speed;
-} usb_configuration_t;
-
-
-// From the EHCI specification, section 3.5
-typedef struct ehci_transfer_descriptor ehci_transfer_descriptor_t;
-struct ehci_transfer_descriptor {
-
-	// DWord 1/2
-	volatile ehci_transfer_descriptor_t *next_dtd_pointer;
-	volatile ehci_transfer_descriptor_t *alternate_next_dtd_pointer;
-
-	// DWord 3
-	struct {
-		uint32_t ping_state_err : 1;
-		uint32_t split_transaction_state : 1;
-		uint32_t missed_uframe : 1;
-		uint32_t transaction_error : 1;
-		uint32_t babble : 1;
-		uint32_t buffer_error : 1;
-		uint32_t halted : 1;
-		uint32_t active : 1;
-
-		uint32_t pid_code : 2;
-		uint32_t error_counter : 2;
-		uint32_t current_page : 3;
-		uint32_t int_on_complete : 1;
-		uint32_t total_bytes : 15;
-		uint32_t data_toggle : 1;
-	};
-
-	volatile uint32_t buffer_pointer_page[5];
-	volatile uint32_t _reserved;
-} __attribute__((packed, aligned(64)));
-
-// From Table 3-18 in the EHCI Spec, section 3.6
-typedef enum {
-	DESCRIPTOR_ITD   = 0,
-	DESCRIPTOR_QH    = 1,
-	DESCRIPTOR_SITD  = 2,
-	DESCRIPTOR_FSTN  = 3
-} ehci_data_descriptor_t;
-
-// From the EHCI specificaitons, section 3.1/3.5
-typedef union ehci_link ehci_link_t;
-union ehci_link {
-	// Convenience deviation from the USB spec.
-	union ehci_link *ptr;
-
-	uint32_t link;
-	struct  {
-		uint32_t terminate : 1;
-		uint32_t type      : 2;
-		uint32_t           : 29;
-	};
-};
-
-
-// From the ECHI specification, section 3.6
-typedef struct {
-
-	// DWord 1
-	ehci_link_t horizontal;
-
-	// DWord 2
-	struct {
-		uint32_t device_address               : 7;
-		uint32_t inactive_on_next_transaction : 1;
-		uint32_t endpoint_number              : 4;
-		uint32_t endpoint_speed               : 2;
-		uint32_t data_toggle_control          : 1;
-		uint32_t head_reclamation_flag        : 1;
-		uint32_t max_packet_length            : 11;
-		uint32_t control_endpoint_flag        : 1;
-		uint32_t nak_count_reload             : 4;
-	};
-
-	// DWord 3
-	struct {
-		uint32_t uframe_smask                 : 8;
-		uint32_t uframe_cmask                 : 8;
-		uint32_t hub_address                  : 7;
-		uint32_t port_number                  : 7;
-		uint32_t mult                         : 2;
-	};
-
-	// Dword 4
-	uint32_t current_qtd;
-
-	// Dword 5
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wpacked-not-aligned"
-	ehci_transfer_descriptor_t overlay;
-
-	// Any custom data we want, here; the hardware won't
-	// touch past the end of the structure above.
-
-} __attribute__((packed, aligned(64))) ehci_queue_head_t;
-#pragma GCC diagnostic pop
-
-typedef struct usb_peripheral usb_peripheral_t;
-
-typedef void (*usb_configuration_changed_callback_t)(usb_peripheral_t *callback);
-
-
-/**
- * Structure describing a dual-mode USB driver that follows the standard
- * EHCI model (host mode) or the common simplified EHCI model (devide mode).
- */
-struct usb_peripheral {
-
-	// A reference to the platform-specific collection of registers
-	// for the given platform.
-	volatile usb_register_block_t *reg;
-
-	/* FIXME: get rid of this! */
-	uint8_t controller;
-
-	// Stores whether the USB controller is in host or device mode.
-	usb_controller_mode_t mode;
-
-	union {
-
-		// Device mode fields.
-		struct {
-
-			// References to each of the relevant device descriptors.
-			usb_device_descriptor_t *device_descriptor;
-			usb_string_descriptor_t **string_descriptors;
-			usb_string_descriptor_t *language_descriptors;
-			usb_device_qualifier_descriptor_t *device_qualifier_descriptor;
-
-			// Collections of configuration descriptors for each of the configuration.
-			usb_configuration_descriptor_t **full_speed_configurations;
-			usb_configuration_descriptor_t **high_speed_configurations;
-
-			// A pointer to the descriptor for the active configuration.
-			usb_configuration_descriptor_t *active_configuration;
-
-			// A callback executed each time the configuration is changed.
-			usb_configuration_changed_callback_t configuration_changed_callback;
-
-			// Collection of USB device Queue Heads (dQH).
-			usb_queue_head_t queue_heads_device[USB_TOTAL_QUEUE_HEADS] ATTR_ALIGNED(2048);
-		};
-
-		// Host mode fields.
-		struct {
-
-			// Head for the asynchronous queue.
-			ehci_queue_head_t async_queue_head;
-
-			// TODO: rename me, I'm not really a head?
-			ehci_queue_head_t periodic_queue_head;
-			ehci_link_t periodic_list[USB_PERIODIC_LIST_SIZE];
-
-			// TODO: support Isochronous trasfers
-
-			// Linked list of pending transfers.
-			ehci_link_t pending_transfers;
-		};
-	};
-};
-
-
 /**
  * Structure representing a USB endpoint, from the driver's perspective.
  */
-typedef struct usb_endpoint_t usb_endpoint_t;
-struct usb_endpoint_t {
+struct usb_endpoint {
 	usb_setup_t setup;
 
 	// The endpoint's address attributes.
@@ -562,5 +424,6 @@ struct usb_endpoint_t {
 	void (*setup_complete)(usb_endpoint_t* const endpoint);
 	void (*transfer_complete)(usb_endpoint_t* const endpoint);
 };
+
 
 #endif

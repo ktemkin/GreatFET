@@ -6,13 +6,13 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include <drivers/usb/lpc43xx/usb.h>
-#include <drivers/usb/lpc43xx/usb_host.h>
-#include <drivers/usb/lpc43xx/usb_type.h>
-#include <drivers/usb/lpc43xx/usb_queue.h>
-#include <drivers/usb/lpc43xx/usb_queue_host.h>
-#include <drivers/usb/lpc43xx/usb_registers.h>
-#include <drivers/usb/lpc43xx/usb_standard_request.h>
+#include <drivers/usb/types.h>
+#include <drivers/usb/ehci/host.h>
+#include <drivers/usb/ehci/types.h>
+#include <drivers/usb/ehci/host_queue.h>
+#include <drivers/usb/ehci/registers.h>
+#include <drivers/usb/standard_request.h>
+
 #include "greatfet_core.h"
 
 #include "glitchkit.h"
@@ -22,7 +22,6 @@
 #include <libopencm3/lpc43xx/creg.h>
 #include <libopencm3/lpc43xx/m4/nvic.h>
 #include <libopencm3/lpc43xx/rgu.h>
-#include <libopencm3/lpc43xx/usb.h>
 #include <libopencm3/lpc43xx/scu.h>
 
 static void usb_host_isr(usb_peripheral_t *host);
@@ -41,9 +40,8 @@ static const vector_table_entry_t usb_peripheral_isrs[] = { usb_host_isr_usb0, u
  */
 int usb_provide_vbus(usb_peripheral_t *host)
 {
-
 	// Enable the port power bit.
-	host->reg->portsc1 |= USB0_PORTSC1_H_PP;
+	host->reg->portsc1.all |= USB0_PORTSC1_H_PP;
 
 	if(host->controller == 1) {
 
@@ -304,11 +302,11 @@ void usb_host_init(usb_peripheral_t *host)
 void usb_host_reset_device(usb_peripheral_t *host)
 {
 	// Disable the port, and request that it reset.
-	host->reg->portsc1 &= ~USB0_PORTSC1_H_PE;
-	host->reg->portsc1 |=  USB0_PORTSC1_H_PR;
+	host->reg->portsc1.all &= ~USB0_PORTSC1_H_PE;
+	host->reg->portsc1.all |=  USB0_PORTSC1_H_PR;
 
 	// Wait for the USB reset to complete.
-	while(host->reg->portsc1 & USB0_PORTSC1_H_PR);
+	while(host->reg->portsc1.all & USB0_PORTSC1_H_PR);
 }
 
 

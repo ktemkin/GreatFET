@@ -540,7 +540,7 @@ static int greatdancer_verb_bus_reset(struct command_transaction *trans)
 {
 	(void)trans;
 
-	usb_bus_reset(&usb_peripherals[1]);
+	usb_handle_bus_reset(&usb_peripherals[1]);
 	return 0;
 }
 

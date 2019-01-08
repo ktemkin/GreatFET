@@ -7,10 +7,9 @@
 
 // TODO: Refactor to support high performance operations without having to
 // expose usb_transfer_descriptor_t. Or usb_endpoint_prime(). Or, or, or...
-#include <libopencm3/lpc43xx/usb.h>
 #include <libopencm3/cm3/vector.h>
 
-#include "usb_type.h"
+#include <drivers/usb/ehci/types.h>
 
 #define USBMODE_HOST_MODE (3)
 #define TERMINATING_LINK  ((void *)0x01)

@@ -7,8 +7,9 @@
 
 #include <libopencm3/lpc43xx/usb.h>
 
-#include "usb_type.h"
-#include "usb_queue.h"
+#include <drivers/usb/ehci/types.h>
+#include <drivers/usb/ehci/registers.h>
+#include <drivers/usb/ehci/device_queue.h>
 
 // TODO: tune these?
 #define USB_HOST_MAX_QUEUE_HEADS 8

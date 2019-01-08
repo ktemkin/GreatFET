@@ -2,16 +2,41 @@
  * This file is part of GreatFET
  */
 
-#ifndef __USB_QUEUE_H__
-#define __USB_QUEUE_H__
+#ifndef __USB_DEVICE_QUEUE_H__
+#define __USB_DEVICE_QUEUE_H__
 
-#include <libopencm3/lpc43xx/usb.h>
 
-#include "usb_type.h"
+
 
 typedef struct _usb_transfer_t usb_transfer_t;
 typedef struct _usb_queue_t usb_queue_t;
+
+typedef struct usb_endpoint usb_endpoint_t;
+
+
 typedef void (*transfer_completion_cb)(void*, unsigned int);
+
+
+typedef struct usb_transfer_descriptor_t usb_transfer_descriptor_t;
+struct usb_transfer_descriptor_t {
+	volatile usb_transfer_descriptor_t *next_dtd_pointer;
+	volatile uint32_t total_bytes;
+	volatile uint32_t buffer_pointer_page[5];
+	volatile uint32_t _reserved;
+};
+
+
+typedef struct {
+	volatile uint32_t capabilities;
+	volatile usb_transfer_descriptor_t *current_dtd_pointer;
+	volatile usb_transfer_descriptor_t *next_dtd_pointer;
+	volatile uint32_t total_bytes;
+	volatile uint32_t buffer_pointer_page[5];
+	volatile uint32_t _reserved_0;
+	volatile uint8_t setup[8];
+	volatile uint32_t _reserved_1[4];
+} usb_queue_head_t;
+
 
 // This is an opaque datatype. Thou shall not touch these members.
 struct _usb_transfer_t {

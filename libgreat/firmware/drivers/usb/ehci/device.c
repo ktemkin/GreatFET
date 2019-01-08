@@ -1,35 +1,29 @@
 /*
- * This file is part of GreatFET
+ * This file is part of libgreat.
+ *
+ * Generic USB drivers for EHCI and Simplified EHCI host and device controllers.
  */
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <debug.h>
 
-#include <drivers/usb/lpc43xx/usb.h>
-#include <drivers/usb/lpc43xx/usb_host.h>
-#include <drivers/usb/lpc43xx/usb_type.h>
-#include <drivers/usb/lpc43xx/usb_queue.h>
-#include <drivers/usb/lpc43xx/usb_registers.h>
-#include <drivers/usb/lpc43xx/usb_standard_request.h>
+#include <drivers/usb/types.h>
+#include <drivers/usb/standard_request.h>
+
+#include <drivers/usb/ehci/device.h>
+#include <drivers/usb/ehci/types.h>
+
+#include <drivers/usb/ehci/device_queue.h>
+#include <drivers/usb/ehci/registers.h>
+#include <drivers/usb/ehci/platform.h>
+
 #include "greatfet_core.h"
 
 #include <libopencm3/lpc43xx/creg.h>
 #include <libopencm3/lpc43xx/m4/nvic.h>
 #include <libopencm3/lpc43xx/rgu.h>
-#include <libopencm3/lpc43xx/usb.h>
 #include <libopencm3/lpc43xx/scu.h>
-
-
-
-#define USB_QH_INDEX(endpoint_address) (((endpoint_address & 0xF) * 2) + ((endpoint_address >> 7) & 1))
-
-
-usb_queue_head_t* usb_queue_head(const uint_fast8_t endpoint_address, usb_peripheral_t* const device)
-{
-	usb_queue_head_t * endpoint_list = device->queue_heads_device;
-	return &endpoint_list[USB_QH_INDEX(endpoint_address)];
-}
 
 
 usb_endpoint_t* usb_endpoint_from_address(const uint_fast8_t endpoint_address, usb_peripheral_t* const device)
@@ -387,7 +381,7 @@ static void usb_controller_set_device_mode(usb_peripheral_t* device)
 
 usb_speed_t usb_current_device_speed(const usb_peripheral_t* const device)
 {
-	switch (device->reg->portsc1 & USB0_PORTSC1_D_PSPD_MASK)
+	switch (device->reg->portsc1.all & USB0_PORTSC1_D_PSPD_MASK)
 	{
 		case USB0_PORTSC1_D_PSPD(0):
 			return USB_SPEED_FULL;
@@ -493,7 +487,12 @@ void usb_controller_reset(usb_peripheral_t* const device)
 	while(usb_controller_is_resetting(device));
 }
 
-void usb_bus_reset( usb_peripheral_t* const device)
+
+/**
+ * Handles a host-issued USB bus reset -- effectively setting up the device controller
+ * for a new burst of communications.
+ */
+void usb_handle_bus_reset(usb_peripheral_t *const device)
 {
 	// According to UM10503 v1.4 section 23.10.3 "Bus reset":
 	usb_reset_all_endpoints(device);
@@ -638,6 +637,8 @@ int usb_set_configuration(usb_peripheral_t *device, uint8_t configuration_value)
 	// If the configuration's changed, store it.
 	device->active_configuration = new_configuration;
 
+	// FIXME: apply our endpoint configuration per this configuration
+
 	// If the device has registered a callback
 	if (device->configuration_changed_callback) {
 		device->configuration_changed_callback(device);
@@ -669,6 +670,29 @@ void usb_device_init(usb_peripheral_t* const device)
 		| USB0_USBINTR_D_SLE
 		| USB0_USBINTR_D_NAKE
 		;
+}
+
+/**
+ * Disables the ability for the given port to connect at high speed.
+ *
+ * Useful for debugging high-speed-specific modes or viewing things
+ * with more primitive USB analyzers.
+ */
+void usb_prevent_high_speed(usb_peripheral_t *device)
+{
+	pr_warning("USB: warning: disabling high speed communications at fw request! \n");
+	device->reg->portsc1.force_full_speed = true;
+}
+
+
+/**
+ * Cancels the effects of a previous usb_prevent_high_speed(), re-enabling
+ * the abiltity for a device to connect at high speeds.
+ */
+void usb_allow_high_speed(usb_peripheral_t *device)
+{
+	pr_warning("USB: re-enabling high speed communciations\n");
+	device->reg->portsc1.force_full_speed = false;
 }
 
 
@@ -843,6 +867,7 @@ static void usb_check_for_setup_events(usb_peripheral_t* const device)
 	}
 }
 
+
 static void usb_check_for_transfer_events(usb_peripheral_t* const device)
 {
 	const uint32_t endptcomplete = usb_get_endpoint_complete(device);
@@ -879,15 +904,29 @@ static void usb_check_for_transfer_events(usb_peripheral_t* const device)
 	}
 }
 
-void usb_handle_suspend(usb_peripheral_t *const device)
-{
-	pr_warning("Handling suspend thing.\n");
 
+/**
+ * Handle notification that the USB host controller may have put
+ * our device into suspend.
+ */
+static void usb_handle_suspend(usb_peripheral_t *const device)
+{
+	// If the device is currently suspend, handle it.
 	if (device->reg->usbsts.dc_suspend) {
-		pr_warning("USB: device suspended\n");
-	} else {
-		pr_warning("USB: not suspended?\n");
+
+		// TODO: issue a callback, so the application using this
+		// driver can handle going into a low-power state
 	}
+}
+
+
+/**
+ * Handle notification of a status change on the given device,
+ * which may indicate connect/disconnect/resume.
+ */
+static void usb_handle_port_status_change(usb_peripheral_t *const device)
+{
+	// TODO: handle these where we can; and issue callbacks where appropriate
 }
 
 
@@ -912,19 +951,21 @@ void usb_device_isr(usb_peripheral_t *const device)
 
 		usb_check_for_setup_events(device);
 		usb_check_for_transfer_events(device);
-
-		// TODO: Reset ignored ENDPTSETUPSTAT and ENDPTCOMPLETE flags?
 	}
 
 	if (status.sof_received) {
 		// Start Of Frame received.
+		// TODO: allow the application to request a SOF-recieved callback,
+		// which allow it to e.g. watchdog on USB communications
+		// TODO: determine if we need to store a "last packet" time, which
+		// may help us to detect suspend, if the hardware isn't reliably going
+		// to generaete dc_suspend
 	}
 
 	if (status.port_change_detected) {
 		// Port change detect:
 		// Port controller entered full- or high-speed operational state.
-
-		pr_warning("port status change detected!\n");
+		usb_handle_port_status_change(device);
 	}
 
 	if (status.dc_suspend) {
@@ -932,10 +973,8 @@ void usb_device_isr(usb_peripheral_t *const device)
 		usb_handle_suspend(device);
 	}
 
+	// If the USB host is issuing a bus reset, handle it accordingly.
 	if (status.usb_reset_received) {
-		pr_warning("USB: host requesting USB reset?\n");
-
-		// USB reset received.
 		usb_bus_reset(device);
 	}
 

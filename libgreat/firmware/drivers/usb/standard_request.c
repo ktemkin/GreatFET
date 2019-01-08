@@ -1,5 +1,6 @@
 /*
- * This file is part of GreatFET
+ * This file is part of libgreat.
+ * USB standard request handlers -- handles the standard portions of the USB request.
  */
 
 #include <stdint.h>
@@ -8,18 +9,11 @@
 #include <debug.h>
 
 // FIXME: move this to a standard USB library
-
 #include <drivers/usb/lpc43xx/usb.h>
 #include <drivers/usb/lpc43xx/usb_type.h>
 #include <drivers/usb/lpc43xx/usb_queue.h>
 
 #include <drivers/usb/lpc43xx/usb_standard_request.h>
-
-enum {
-	USB_MAX_STRING_LEN = 64,
-};
-
-uint8_t usb_string_buffer[(USB_MAX_STRING_LEN * 2) + sizeof(usb_string_descriptor_t)];
 
 
 /**
@@ -67,27 +61,27 @@ static usb_request_status_t usb_send_descriptor(usb_endpoint_t* const endpoint, 
 }
 
 
-
 /**
+ * Scheudles a response to a GET_DESCRIPTOR request targeting a string descriptor.
  *
+ * @param index The index of the string descriptor to send.
+ * @return A request status; _OK on success or _STALL on failure.
  */
-static usb_request_status_t usb_send_descriptor_string(usb_endpoint_t* const endpoint)
+static usb_request_status_t usb_send_descriptor_string(usb_endpoint_t* const endpoint, uint8_t index)
 {
-	uint8_t index = endpoint->setup.value_l;
+	usb_string_descriptor_list_entry *entry = endpoint->device->string_descriptors;
 
-	// Special case: language strings are sent directly.
-	if (index == 0) {
-		return usb_send_descriptor(endpoint, (usb_descriptor_t *)endpoint->device->language_descriptors);
-	}
+	// Iterate through the list of string descriptors until we find a sentinel.
+	while (entry->descriptor) {
 
-	// Search each of the string descriptors associated with the device.
-	for (uint8_t i = 1; endpoint->device->string_descriptors[i] != 0; i++) {
-
-		// If this is the string descriptor we're looking for, send it.
-		if (i == index) {
-			usb_descriptor_t *descriptor = endpoint->device->string_descriptors[i];
+		// If we've found the relevant string descriptor, return it.
+		if (entry->index == index) {
+			usb_descriptor_t *descriptor = (void *)entry->descriptor;
 			return usb_send_descriptor(endpoint, descriptor);
 		}
+
+		// Otherwise, move to the next entry.
+		++entry;
 	}
 
 	return USB_REQUEST_STATUS_STALL;
@@ -95,7 +89,9 @@ static usb_request_status_t usb_send_descriptor_string(usb_endpoint_t* const end
 
 
 /**
+ * Core handler for GET_DESCRIPTOR requests, which respond allowing a USB device to self-identify.
  *
+ * @return A request status; _OK on success or _STALL on failure.
  */
 static usb_request_status_t usb_standard_request_get_descriptor(usb_endpoint_t* const endpoint)
 {
@@ -105,37 +101,45 @@ static usb_request_status_t usb_standard_request_get_descriptor(usb_endpoint_t* 
 	uint8_t descriptor_index = endpoint->setup.value_l;
 
 	switch (descriptor_type) {
+		case USB_DESCRIPTOR_TYPE_STRING:
+			return usb_send_descriptor_string(endpoint, descriptor_index);
+
 		case USB_DESCRIPTOR_TYPE_DEVICE:
-			descriptor = (void *)endpoint->device->device_descriptor;
+			descriptor = (usb_descriptor_t *)endpoint->device->device_descriptor;
 			break;
 
 		case USB_DESCRIPTOR_TYPE_CONFIGURATION:
-			descriptor = (void *)usb_find_configuration_descriptor(endpoint->device, descriptor_index);
+			descriptor = (usb_descriptor_t *)usb_find_configuration_descriptor(endpoint->device, descriptor_index + 1);
 			break;
 
 		case USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER:
-			descriptor = (void *)endpoint->device->device_qualifier_descriptor;
+			descriptor = (usb_descriptor_t *)endpoint->device->device_qualifier_descriptor;
 			break;
 
 		case USB_DESCRIPTOR_TYPE_OTHER_SPEED_CONFIGURATION:
-			descriptor = (void *)usb_find_other_speed_configuration_descriptor(endpoint->device, descriptor_index);
+			descriptor = (usb_descriptor_t *)
+				usb_find_other_speed_configuration_descriptor(endpoint->device, descriptor_index);
 			break;
-
-		case USB_DESCRIPTOR_TYPE_STRING:
-			return usb_send_descriptor_string(endpoint);
 
 		case USB_DESCRIPTOR_TYPE_INTERFACE:
 		case USB_DESCRIPTOR_TYPE_ENDPOINT:
 			// FIXME: implement these!
-
-		default:
-			return USB_REQUEST_STATUS_STALL;
+			descriptor = NULL;
 	}
 
-	return usb_send_descriptor(endpoint, descriptor);
+	// If we successfully found a descriptor to send, do so!
+	if (descriptor) {
+		return usb_send_descriptor(endpoint, descriptor);
+	} else {
+		return USB_REQUEST_STATUS_STALL;
+	}
 }
 
 
+/**
+ *  Handle USB SET_ADDRESS requests, which assign the device a unique address
+ *  during early enumeration.
+ */
 static usb_request_status_t usb_standard_request_set_address(usb_endpoint_t* const endpoint)
 {
 	usb_set_address_deferred(endpoint->device, endpoint->setup.value_l);
@@ -144,6 +148,10 @@ static usb_request_status_t usb_standard_request_set_address(usb_endpoint_t* con
 }
 
 
+/**
+ *  Handle USB SET_CONFIGURATION requests, which select which configuration will
+ *  be activated. Usually represents the last critical stage of enumeration/configuration.
+ */
 static usb_request_status_t usb_standard_request_set_configuration(usb_endpoint_t* const endpoint)
 {
 	const uint8_t usb_configuration = endpoint->setup.value_l;
@@ -164,7 +172,7 @@ static usb_request_status_t usb_standard_request_set_configuration(usb_endpoint_
 
 
 /**
- *
+ * Handle a USB GET_CONFIGURATION request, which returns the value of the active configuration.
  */
 static usb_request_status_t usb_standard_request_get_configuration(usb_endpoint_t* const endpoint)
 {
@@ -189,7 +197,8 @@ static usb_request_status_t usb_standard_request_get_configuration(usb_endpoint_
 
 
 /**
- *
+ * Handle a USB GET_STATUS request, which informs the host of the device,
+ * endpoint, or interface status.
  */
 static usb_request_status_t usb_standard_request_get_status(usb_endpoint_t* const endpoint)
 {
@@ -200,6 +209,8 @@ static usb_request_status_t usb_standard_request_get_status(usb_endpoint_t* cons
 	if (endpoint->setup.length != sizeof(status)) {
 		return USB_REQUEST_STATUS_STALL;
 	}
+
+	// FIXME: handle status for interface/endpoint requests!
 
 	usb_transfer_schedule_block(endpoint->in, &status, sizeof(status), NULL, NULL);
 	usb_transfer_schedule_ack(endpoint->out);
@@ -219,7 +230,8 @@ static usb_request_status_t usb_standard_request_unhandled(usb_endpoint_t* const
 
 
 /**
- *
+ * Helper function that determines which of the above handlers should handle
+ * a given standard request.
  */
 static usb_request_handler_t usb_get_handler_for_standard_request(uint8_t request)
 {
@@ -240,10 +252,11 @@ static usb_request_handler_t usb_get_handler_for_standard_request(uint8_t reques
 	return usb_standard_request_unhandled;
 }
 
+
 /**
+ * Top-level USB request handler for _standard_ requests.
  */
-usb_request_status_t usb_standard_request(usb_endpoint_t* const endpoint,
-	const usb_transfer_stage_t stage)
+usb_request_status_t usb_standard_request(usb_endpoint_t* const endpoint, const usb_transfer_stage_t stage)
 {
 	uint8_t request = endpoint->setup.request;
 

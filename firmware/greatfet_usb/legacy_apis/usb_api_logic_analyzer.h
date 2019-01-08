@@ -5,8 +5,8 @@
 #ifndef __USB_API_LOGIC_ANALYZER_H__
 #define __USB_API_LOGIC_ANALYZER_H__
 
-#include <drivers/usb/lpc43xx/usb_type.h>
-#include <drivers/usb/lpc43xx/usb_request.h>
+#include <drivers/usb/types.h>
+#include <drivers/usb/request.h>
 
 extern volatile bool logic_analyzer_enabled;
 

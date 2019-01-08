@@ -12,7 +12,7 @@
 
 #include <greatfet_core.h>
 
-#include "drivers/usb/lpc43xx/usb.h"
+#include <drivers/usb/ehci/device.h>
 
 #include "usb_request_handlers.h"
 
@@ -35,8 +35,7 @@
 
 #include <drivers/memory/allocator.h>
 
-extern char serial_number_ascii[USB_DESCRIPTOR_STRING_SERIAL_LEN + 1];
-
+void greatfet_set_up_descriptors(void);
 
 void init_usb0(void) {
 	usb_peripheral_reset(&usb_peripherals[0]);
@@ -54,6 +53,10 @@ void init_usb0(void) {
 
 	nvic_set_priority(NVIC_USB0_IRQ, 254);
 
+	// For debug: disbale High Speed mode, if desired.
+	usb_prevent_high_speed(&usb_peripherals[0]);
+
+	greatfet_set_up_descriptors();
 	usb_run(&usb_peripherals[0]);
 }
 

@@ -74,6 +74,8 @@ int core_verb_read_serial_number(struct command_transaction *trans)
 		return EINVAL;
 
 	// Read the board's serial number.
+	// FIXME: do we want to use our simulated IAP mode, or do we want to just call this directly?
+	// FIXME: this should probably be just handled via a libgreat platform hook
 	iap_cmd_res.cmd_param.command_code = IAP_CMD_READ_SERIAL_NO;
 	iap_cmd_call(&iap_cmd_res);
 

@@ -10,11 +10,10 @@
 #include <errno.h>
 
 
-#include <drivers/usb/lpc43xx/usb.h>
-#include <drivers/usb/lpc43xx/usb_host.h>
-#include <drivers/usb/lpc43xx/usb_queue_host.h>
-#include <drivers/usb/lpc43xx/usb_type.h>
-#include <drivers/usb/lpc43xx/usb_registers.h>
+#include <drivers/usb/ehci/host.h>
+#include <drivers/usb/ehci/host_queue.h>
+#include <drivers/usb/ehci/types.h>
+#include <drivers/usb/ehci/registers.h>
 
 #include "greatfet_core.h"
 #include "glitchkit.h"

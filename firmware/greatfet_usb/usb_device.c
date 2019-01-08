@@ -10,7 +10,6 @@
 #include <rom_iap.h>
 #include <string.h>
 
-
 /**
  * Currently, the GreatFET has a configuration descriptor with three
  * subordinates: a single interface that owns two subordinate endpoints.
@@ -26,7 +25,9 @@ typedef struct greatfet_composite_configuration {
  * Buffer that will store the to-be-generated ASCII string
  * that stores an ASCII representation of our serial number.
  */
-uint8_t serial_number_string[(USB_DESCRIPTOR_STRING_SERIAL_LEN * 2) + 2];
+uint8_t serial_number_string[(USB_DESCRIPTOR_STRING_SERIAL_LEN * sizeof(char16_t)) + 2];
+static usb_string_descriptor_t default_serial_string = USB_STRING_DESCRIPTOR("GSG");
+
 
 /**
  * The device descriptor for the GreatFET.
@@ -136,6 +137,9 @@ static usb_interface_descriptor_t interface_descriptor = {
 	// This is our first (zero-indexed) index.
 	.number                     = 0,
 
+	// No alternate settings for this interface.
+	.alternate_setting          = 0,
+
 	// For now, we support two bulk endpoints; one in each direction.
 	.endpoint_count             = 2,
 
@@ -189,7 +193,6 @@ static greatfet_composite_configuration_t composite_config_descriptor_hs = {
 		}
 	}
 };
-
 static greatfet_composite_configuration_t composite_config_descriptor_fs = {
 	.endpoints     = {
 		{
@@ -223,37 +226,55 @@ static greatfet_composite_configuration_t composite_config_descriptor_fs = {
 	}
 };
 
+
+static uint8_t nibble_to_hex(uint8_t nibble)
+{
+	return (nibble > 9) ? ('a' + nibble - 10) : ('0' + nibble);
+}
+
+
 /**
- * FIXME: simplify me now that we can?
+ * Automatically generate the USB serial number string descriptor for the current
+ * GreatFET, which allows us to find USB devices by their GreatFET serial number.
  */
 void usb_set_descriptor_by_serial_number(void)
 {
-	int position = 0;
-	iap_cmd_res_t iap_cmd_res;
+	usb_string_descriptor_t *descriptor = (usb_string_descriptor_t *)serial_number_string;
 
-	/* Read IAP Serial Number Identification */
+	iap_cmd_res_t iap_cmd_res;
+	int position = 0;
+
+	// Attempt to read the serial number from the GreatFET API.
+	// FIXME: this should use a libgreat platform abstraction to get the serial number
 	iap_cmd_res.cmd_param.command_code = IAP_CMD_READ_SERIAL_NO;
 	iap_cmd_call(&iap_cmd_res);
 
 	if (iap_cmd_res.status_res.status_ret != CMD_SUCCESS) {
+		memcpy(serial_number_string, &default_serial_string, default_serial_string.length);
 		return;
 	}
 
-	serial_number_string[position++] = USB_DESCRIPTOR_STRING_SERIAL_LEN;
-	serial_number_string[position++] = USB_DESCRIPTOR_TYPE_STRING;
+	// Populate the header of our string descriptor...
+	descriptor->length = USB_DESCRIPTOR_STRING_SERIAL_LEN * sizeof(char16_t) + sizeof(usb_descriptor_t);
+	descriptor->type   = USB_DESCRIPTOR_TYPE_STRING;
 
-	/* 32 characters of serial number, convert to UTF16-LE */
-	for (size_t i=0; i < USB_DESCRIPTOR_STRING_SERIAL_LEN; i++) {
-		const uint8_t nibble = (iap_cmd_res.status_res.iap_result[i >> 3] >> (28 - (i & 7) * 4)) & 0xf;
-		const char16_t c = (nibble > 9) ? ('a' + nibble - 10) : ('0' + nibble);
+	// ... and populate its body. We'll iterate through each word of the serial number...
+	for (int word = 0; word < 4; ++word) {
+		uint32_t current_word = iap_cmd_res.status_res.iap_result[word];
 
-		serial_number_string[position++] = c;
-		serial_number_string[position++] = 0;
+		// ... and convert each relevant nibble into a character.
+		for (int offset = 28; offset >= 0; offset -= 4) {
+			uint8_t current_nibble = (current_word >> offset) & 0xf;
+			descriptor->string[position++] = nibble_to_hex(current_nibble);
+		}
 	}
 }
 
 
-static void set_up_descriptors(void)
+/**
+ * Initialize the descriptors we'll use to describe GreatFET devices.
+ */
+void greatfet_set_up_descriptors(void)
 {
 	// Configuration
 	memcpy(&composite_config_descriptor_hs.configuration, &configuration_descriptor, sizeof(configuration_descriptor));
@@ -266,40 +287,37 @@ static void set_up_descriptors(void)
 	// Serial numnber.
 	usb_set_descriptor_by_serial_number();
 }
-CALL_ON_INIT(set_up_descriptors);
+CALL_ON_INIT(greatfet_set_up_descriptors);
 
 
 /**
- *
+ * Populate the list of configurations we support for each of our speeds.
  */
 static usb_configuration_descriptor_t *configurations_hs[] = { (void *)&composite_config_descriptor_hs, 0 };
 static usb_configuration_descriptor_t *configurations_fs[] = { (void *)&composite_config_descriptor_fs, 0 };
 
-
-static usb_string_descriptor_t language_descriptor = {
-	.length = sizeof(language_descriptor), .type   = USB_DESCRIPTOR_TYPE_STRING,
-	.string = { 0x0409 }
-};
-static usb_string_descriptor_t manufacturer_string = {
-	.length = sizeof(manufacturer_string), .type   = USB_DESCRIPTOR_TYPE_STRING,
-	.string = u"Great Scott Gadgets",
-};
-static usb_string_descriptor_t product_string = {
-	.length = sizeof(product_string), .type   = USB_DESCRIPTOR_TYPE_STRING,
-	.string = u"GreatFET",
-};
+/**
+ * Define each of our USB string descriptors.
+ */
+static usb_string_descriptor_t language_descriptor   = USB_SUPPORTED_LANGUAGES_DESCRIPTOR(0x0409);
+static usb_string_descriptor_t manufacturer_string   = USB_STRING_DESCRIPTOR("Great Scott Gadgets");
+static usb_string_descriptor_t product_string        = USB_STRING_DESCRIPTOR("GreatFET");
 
 
 /**
- * ASCII versions of our string descriptors.
+ * Sparse list of all of our string descriptors.
  */
-static usb_string_descriptor_t *string_descriptors[] = {
-	&language_descriptor,
-	&manufacturer_string,
-	&product_string,
-	(usb_string_descriptor_t *)serial_number_string,
-};
+static usb_string_descriptor_list_entry string_descriptors[] = {
 
+	/* Our list of descriptors. */
+	{ .index = 0, .descriptor = &language_descriptor},
+	{ .index = 1, .descriptor = &manufacturer_string},
+	{ .index = 2, .descriptor = &product_string},
+	{ .index = 3, .descriptor = (usb_string_descriptor_t *)serial_number_string},
+
+	/* Sentinel. */
+	{ .descriptor = 0 }
+};
 
 
 /**
@@ -309,7 +327,6 @@ usb_peripheral_t usb_peripherals[] = {
 	{
 		.device_descriptor           = &device_descriptor,
 		.string_descriptors          = string_descriptors,
-		.language_descriptors        = &language_descriptor,
 		.device_qualifier_descriptor = &device_qualifier_descriptor,
 		.high_speed_configurations   = configurations_hs,
 		.full_speed_configurations   = configurations_fs,
@@ -322,7 +339,6 @@ usb_peripheral_t usb_peripherals[] = {
 	{
 		.device_descriptor           = &device_descriptor,
 		.string_descriptors          = string_descriptors,
-		.language_descriptors        = &language_descriptor,
 		.device_qualifier_descriptor = &device_qualifier_descriptor,
 		.high_speed_configurations   = configurations_hs,
 		.full_speed_configurations   = configurations_fs,

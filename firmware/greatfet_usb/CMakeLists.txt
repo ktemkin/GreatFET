@@ -33,14 +33,16 @@ set(SRC_M4
     # internal components
     pin_manager.c
 
-    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb.c"
-    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_host.c"
-    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_request.c"
-    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_standard_request.c"
-    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_queue.c"
-    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_queue_host.c"
+    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/ehci/device.c"
+    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/ehci/device_queue.c"
+    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/ehci/host.c"
+    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/ehci/host_queue.c"
+    "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/usb/ehci/platform.c"
+    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/request.c"
+    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/standard_request.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/comms_backend.c"
-    "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/gpio/${LIBGREAT_PLATFORM}/gpio.c"
+
+    "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/gpio.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/comms/comms_class.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/comms/utils.c"
     "${PATH_GREATFET_FIRMWARE_COMMON}/gpdma.c"

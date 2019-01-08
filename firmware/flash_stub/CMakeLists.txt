@@ -1,4 +1,3 @@
-#
 # This file is part of GreatFET
 #
 
@@ -16,7 +15,6 @@ set(SRC_M4
 
     # usb content
     ${PATH_GREATFET_FIRMWARE_GFUSB}/usb_bulk_buffer.c
-    ${PATH_GREATFET_FIRMWARE_GFUSB}/usb_descriptor.c
     ${PATH_GREATFET_FIRMWARE_GFUSB}/usb_device.c
     ${PATH_GREATFET_FIRMWARE_GFUSB}/usb_endpoint.c
 

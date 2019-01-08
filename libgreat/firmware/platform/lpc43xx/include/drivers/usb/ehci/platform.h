@@ -1,28 +1,24 @@
 /*
- * This file is part of GreatFET
+ * This file is part of libgreat.
+ *
+ * Platform-specific
  */
 
-#ifndef __USB_REGISTERS_H__
-#define __USB_REGISTERS_H__
+#ifndef __USB_PLATFORM_H__
+#define __USB_PLATFORM_H__
+
+#include <drivers/usb/ehci/registers.h>
+#include <drivers/usb/ehci/device_queue.h>
+
+#include <drivers/usb/types.h>
 
 
-typedef union {
-	struct {
-		uint32_t usb_interrupt        :  1;
-		uint32_t usb_error_interrupt  :  1;
-		uint32_t port_change_detected :  1;
-		uint32_t                      :  1;
-		uint32_t system_error         :  1;
-		uint32_t                      :  1;
-		uint32_t usb_reset_received   :  1;
-		uint32_t sof_received         :  1;
-		uint32_t dc_suspend           :  1;
-		uint32_t                      :  7;
-		uint32_t nak_interrupt        :  1;
-		uint32_t                      : 15;
-	} ATTR_PACKED;
-	uint32_t all;
-} usb_interrupt_flags_t;
+typedef struct {
+
+	// Collection of USB device Queue Heads (dQH).
+	usb_queue_head_t queue_heads_device[USB_TOTAL_QUEUE_HEADS] ATTR_ALIGNED(2048);
+
+} usb_device_platform_specifics_t;
 
 
 /**
@@ -67,7 +63,40 @@ typedef struct {
 	volatile uint32_t endptnak;
 	volatile uint32_t endptnaken;
 	volatile uint32_t reserved5;
-	volatile uint32_t portsc1;
+
+	/**
+	 * Port status and control register.
+	 */
+	union {
+		volatile uint32_t all;
+		struct {
+			uint32_t connection                  :  1;
+			uint32_t connection_status_changed   :  1;
+			uint32_t port_enable                 :  1;
+			uint32_t port_enable_changed         :  1;
+			uint32_t over_current_active         :  1;
+			uint32_t over_current_changed        :  1;
+			uint32_t force_port_resume           :  1;
+			uint32_t in_suspend                  :  1;
+			uint32_t port_reset                  :  1;
+			uint32_t connection_is_high_speed    :  1;
+			uint32_t line_status                 :  2;
+			uint32_t port_power_state            :  1;
+			uint32_t                             :  1;
+			uint32_t port_indicator_state        :  2;
+			uint32_t port_test_control           :  4;
+			uint32_t wake_on_connect_enabled     :  1;
+			uint32_t wake_on_disconnect_enabled  :  1;
+			uint32_t wake_on_overcurrent_enabled :  1;
+			uint32_t disable_phy_clock           :  1;
+			uint32_t force_full_speed            :  1;
+			uint32_t                             :  1;
+			uint32_t current_port_speed          :  2;
+			uint32_t                             :  4;
+
+		} ATTR_PACKED;
+	} portsc1;
+
 	volatile uint32_t reserved6[7];
 	volatile uint32_t otgsc;
 	volatile uint32_t usbmode;
