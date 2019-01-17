@@ -11,13 +11,14 @@ SET(PATH_GREATFET_FIRMWARE ${PATH_GREATFET}/firmware)
 SET(PATH_GREATFET_FIRMWARE_COMMON ${PATH_GREATFET_FIRMWARE}/common)
 SET(LIBOPENCM3 ${PATH_GREATFET_FIRMWARE}/libopencm3)
 
+# FIXME: make this configurable
+SET(LIBGREAT_PLATFORM lpc43xx)
+
 # FIXME: pull these out into libgreat
 SET(PATH_LIBGREAT ${CMAKE_CURRENT_LIST_DIR}/../../libgreat)
 SET(PATH_LIBGREAT_FIRMWARE ${PATH_LIBGREAT}/firmware)
 SET(PATH_LIBGREAT_FIRMWARE_DRIVERS ${PATH_LIBGREAT_FIRMWARE}/drivers)
-
-# FIXME: make this configurable
-SET(LIBGREAT_PLATFORM lpc43xx)
+SET(PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS ${PATH_LIBGREAT_FIRMWARE}/platform/${LIBGREAT_PLATFORM}/drivers)
 
 execute_process(
 	COMMAND git log -n 1 --format=%h
@@ -65,7 +66,15 @@ endif()
 SET(LDSCRIPT_M4_DFU "-T${MCU_PARTNO}_M4_memory.ld -Tlibgreat_lpc43xx.ld -TLPC43xx_M4_M0_image_from_text.ld")
 SET(LDSCRIPT_M0 "-TLPC43xx_M0_memory.ld -Tlibopencm3_lpc43xx_m0.ld")
 
-SET(CFLAGS_COMMON "-Os -g3 -Wall -Wextra ${GREATFET_OPTS} -fno-common -MD -fno-builtin-printf -Wno-missing-field-initializers")
+# If we're a debug build, optimize for debugging; rather than for size.
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+	SET(GREATFET_OPTIMIZATION "-Og")
+else()
+	SET(GREATFET_OPTIMIZATION "-Os")
+endif()
+
+SET(CFLAGS_COMMON "${GREATFET_OPTIMIZATION} -g3 -Wall -Wextra ${GREATFET_OPTS} -fno-common -MD -fno-builtin-printf -Wno-missing-field-initializers")
+SET(CFLAGS_COMMON "${CFLAGS_COMMON} -fstrict-volatile-bitfields -Wno-address-of-packed-member")
 SET(LDFLAGS_COMMON "-nostartfiles -Wl,--gc-sections")
 
 if(V STREQUAL "1")
@@ -73,12 +82,12 @@ if(V STREQUAL "1")
 endif()
 
 SET(CPUFLAGS_M0 "-mthumb -mcpu=cortex-m0 -mfloat-abi=soft")
-SET(CFLAGS_M0 "-std=gnu99 ${CFLAGS_COMMON} ${CPUFLAGS_M0} -DLPC43XX_M0")
+SET(CFLAGS_M0 "-std=gnu11 ${CFLAGS_COMMON} ${CPUFLAGS_M0} -DLPC43XX_M0")
 SET(CXXFLAGS_M0 "-std=gnu++0x ${CFLAGS_COMMON} ${CPUFLAGS_M0} -DLPC43XX_M0")
 SET(LDFLAGS_M0 "${LDFLAGS_COMMON} ${CPUFLAGS_M0} ${LDSCRIPT_M0} -Xlinker -Map=m0.map")
 
 SET(CPUFLAGS_M4 "-mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16")
-SET(CFLAGS_M4 "-std=gnu99 ${CFLAGS_COMMON} ${CPUFLAGS_M4} -DLPC43XX_M4")
+SET(CFLAGS_M4 "-std=gnu11 ${CFLAGS_COMMON} ${CPUFLAGS_M4} -DLPC43XX_M4")
 SET(CXXFLAGS_M4 "-std=gnu++0x ${CFLAGS_COMMON} ${CPUFLAGS_M4} -DLPC43XX_M4")
 SET(LDFLAGS_M4 "${LDFLAGS_COMMON} ${CPUFLAGS_M4} ${LDSCRIPT_M4} -Xlinker -Map=m4.map")
 SET(LDFLAGS_M4_DFU "${LDFLAGS_COMMON} ${CPUFLAGS_M4} ${LDSCRIPT_M4_DFU} -Xlinker -Map=m4.map")
@@ -90,7 +99,8 @@ include_directories("${PATH_GREATFET_FIRMWARE_COMMON}")
 
 # FIXME: pull out into libgreat, probably?
 include_directories("${PATH_LIBGREAT_FIRMWARE}/include")
-include_directories("${PATH_LIBGREAT_FIRMWARE}/include/platform/${LIBGREAT_PLATFORM}")
+include_directories("${PATH_LIBGREAT_FIRMWARE}/include/platform/${LIBGREAT_PLATFORM}") # FIXME: remove
+include_directories("${PATH_LIBGREAT_FIRMWARE}/platform/${LIBGREAT_PLATFORM}/include")
 AUX_SOURCE_DIRECTORY("${PATH_LIBGREAT_FIRMWARE}/classes" LIBGREAT_API_CLASSES)
 
 
@@ -98,8 +108,21 @@ macro(DeclareTargets)
 	SET(SRC_M4
 		${SRC_M4}
 
-		#fixme: pull into libgreat
+        # FIXME: pull most of the below into libgreat
 		${PATH_LIBGREAT_FIRMWARE}/platform/${LIBGREAT_PLATFORM}/crt0.c
+
+        # core / generic drivers
+        "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/timer.c"
+        "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/reset.c"
+
+        # platform drivers
+        "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/platform_timer.c"
+        "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/platform_clock.c"
+        "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/platform_config.c"
+        "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/platform_reset.c"
+
+        # TODO: system control
+        "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/arm_system_control.c"
 
 		# libgreat high-level functions
 		${PATH_LIBGREAT_FIRMWARE}/platform/${LIBGREAT_PLATFORM}/sync.c
@@ -116,7 +139,6 @@ macro(DeclareTargets)
 		${PATH_GREATFET_FIRMWARE_COMMON}/sgpio.c
 		${PATH_GREATFET_FIRMWARE_COMMON}/debug.c
 		${PATH_GREATFET_FIRMWARE_COMMON}/printf.c
-		${PATH_GREATFET_FIRMWARE_COMMON}/time.c
 	)
 
 	configure_file(

@@ -2,6 +2,9 @@
  * This file is part of GreatFET
  */
 
+
+#include <debug.h>
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -18,6 +21,8 @@
 #include <libopencm3/lpc43xx/rgu.h>
 #include <libopencm3/lpc43xx/usb.h>
 #include <libopencm3/lpc43xx/scu.h>
+
+#include <drivers/platform_clock.h>
 
 // FIXME: Clean me up to use the USB_REG macro from usb_registers.h to reduce duplication!
 
@@ -719,6 +724,7 @@ static void usb_interrupt_enable(
 	}
 }
 
+
 void usb_device_init(
 	usb_peripheral_t* const device
 ) {
@@ -729,6 +735,11 @@ void usb_device_init(
 		usb_controller_reset(device);
 		usb_controller_set_device_mode(device);
 
+		// Temporary: if we're in emergency mode, prevent high speed .
+		if (platform_get_parent_clock_source(CLOCK_SOURCE_PLL0_USB) == CLOCK_SOURCE_INTERNAL_OSCILLATOR) {
+			pr_warning("In emergency mode; disabling high speed USB.\n");
+			USB0_PORTSC1_D |= USB0_PORTSC1_D_PFSC;
+		}
 
 		// Set interrupt threshold interval to 0
 		USB0_USBCMD_D &= ~USB0_USBCMD_D_ITC_MASK;

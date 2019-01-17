@@ -33,6 +33,7 @@ set(SRC_M4
     # internal components
     pin_manager.c
 
+
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_host.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_request.c"
@@ -40,6 +41,14 @@ set(SRC_M4
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_queue.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/${LIBGREAT_PLATFORM}/usb_queue_host.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/usb/comms_backend.c"
+
+    # ethernet drivers
+    "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/ethernet.c"
+
+    # platform drivers
+    "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/platform_clock.c"
+    "${PATH_LIBGREAT_FIRMWARE_PLATFORM_DRIVERS}/platform_config.c"
+
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/gpio/${LIBGREAT_PLATFORM}/gpio.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/comms/comms_class.c"
     "${PATH_LIBGREAT_FIRMWARE_DRIVERS}/comms/utils.c"

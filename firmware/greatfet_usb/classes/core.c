@@ -11,9 +11,9 @@
 
 #include <greatfet_core.h>
 #include <rom_iap.h>
-#include <libopencm3/lpc43xx/wwdt.h>
 
 #include <drivers/comms.h>
+#include <drivers/reset.h>
 #include <debug.h>
 
 #define CLASS_NUMBER_CORE 0
@@ -24,7 +24,7 @@ char version_string[] = VERSION_STRING;
  * Method that determines the board's ID.
  * Overrideable if derivative firmware wants to auto-detect which board it's running on.
  */
-uint32_t WEAK core_get_board_id()
+uint32_t ATTR_WEAK core_get_board_id()
 {
 	return BOARD_ID;
 }
@@ -93,6 +93,7 @@ int core_verb_read_serial_number(struct command_transaction *trans)
 int core_verb_request_reset(struct command_transaction *trans)
 {
 	uint32_t reset_reason_command = comms_argument_parse_uint32_t(trans);
+	reset_reason_t reset_reason;
 
 	if(reset_reason_command == 1) {
 		pr_info("Performing soft reset and switching to external clock...\n");
@@ -102,6 +103,6 @@ int core_verb_request_reset(struct command_transaction *trans)
 		reset_reason = RESET_REASON_SOFT_RESET;
 	}
 
-	wwdt_reset(100000);
+	system_reset(reset_reason, true);
 	return 0;
 }
