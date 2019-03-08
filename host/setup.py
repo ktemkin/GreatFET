@@ -12,9 +12,22 @@ if sys.version_info[0] < 3 and 'bdist_wheel' not in sys.argv:
     install_req.remove('ipython')
     install_req.append('ipython<6')
 
+setup_req = []
+version_format = None
+version = None
+
+# Deduce version, if possible.
+if os.path.isfile('../VERSION'):
+    version = read('../VERSION')
+else:
+    version_format = '{tag}.dev{commitcount}+git.{gitsha}'
+    setup_req.append('setuptools-git-version')
+
 setup(
     name='GreatFET',
-    version='0.0', #TODO: Derive this from the main module.
+    version=version,
+    version_format=version_format,
+    setup_requires=setup_req,
     url='https://greatscottgadgets.com/greatfet/',
     license='BSD',
     entry_points={
@@ -36,8 +49,8 @@ setup(
             'greatfet_dmesg = greatfet.commands.greatfet_dmesg:main',
         ],
     },
-    #author='', #TODO: Figure out whose name should go here!
-    #author_email='',
+    author='Great Scott Gadgets', #TODO: Figure out whose name should go here!
+    author_email='ktemkin@greatscottgadgets.com',
     tests_require=[''],
     install_requires=['pyusb', install_req, 'pygreat', 'future'],
     description='Python library for hardware hacking with the GreatFET',
