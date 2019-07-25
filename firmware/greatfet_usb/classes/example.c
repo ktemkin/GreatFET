@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <ctype.h>
 
-#define CLASS_NUMBER_EXAMPLE (0x100)
+#define CLASS_NUMBER_SELF (0x100)
 
 /**
  * TODO: document adding a new class here
@@ -99,12 +99,12 @@ static int example_verb_capitalize(struct command_transaction *trans)
 /**
  * Verbs for the firmware API.
  */
-static struct comms_verb example_verbs[] = {
+static struct comms_verb _verbs[] = {
 		{
 			// The number of the verb. Each verb must have a unique number.
 			.verb_number = 0x0,
 
-			// The name of the verb. These are typically named like C funciton names.
+			// The name of the verb. These are typically named like C function names.
 			.name = "sum_and_difference",
 
 			// The handler function for the given verb. This is the verb definition we
@@ -138,6 +138,6 @@ static struct comms_verb example_verbs[] = {
 		// for our list of verbs.
 		{}
 };
-COMMS_DEFINE_SIMPLE_CLASS(example, CLASS_NUMBER_EXAMPLE, "example", example_verbs,
+COMMS_DEFINE_SIMPLE_CLASS(example, CLASS_NUMBER_SELF, "example", _verbs,
         "Example API that demonstrates how GreatFET communications work.");
 
