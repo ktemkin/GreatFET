@@ -59,6 +59,12 @@ void init_usb0(void) {
 	usb_run(&usb_peripherals[0]);
 }
 
+// XXX:
+void service_usb_analysis(void);
+
+// XXX
+int rhododendron_early_init(void);
+
 
 int main(void) {
 	pin_setup();
@@ -76,6 +82,8 @@ int main(void) {
 		emergency_mode();
 	}
 
+	rhododendron_early_init();
+
 	while(true) {
 		if(sdir_rx_enabled) {
 			sdir_rx_mode();
@@ -89,6 +97,7 @@ int main(void) {
 		service_heartbeat();
 		service_usb_streaming();
 		service_glitchkit();
+		service_usb_analysis();
 	}
 
 	return 0;

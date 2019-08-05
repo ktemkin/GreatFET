@@ -36,6 +36,7 @@ setup(
             'greatfet_dmesg = greatfet.commands.greatfet_dmesg:main',
             'greatfet_msp430 = greatfet.commands.greatfet_msp430:main',
             'greatfet_pattern = greatfet.commands.greatfet_pattern:main',
+            'greatfet_usb_capture = greatfet.commands.greatfet_usb_capture:main',
         ],
     },
     #author='', #TODO: Figure out whose name should go here!

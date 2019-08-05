@@ -32,6 +32,10 @@ add_greatfet_targets(${PROJECT_NAME}
 	${CMAKE_CURRENT_SOURCE_DIR}/legacy_apis/usb_api_glitchkit_simple.c
 	${CMAKE_CURRENT_SOURCE_DIR}/legacy_apis/usb_api_DS18B20.c
 	${CLASSES_SOURCES}
+
+	# Rhododendron functionality.
+	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/configuration.c
+	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/capture.c
 )
 use_libgreat_modules(${PROJECT_NAME} allocator comms usb usb_comms gpio ad970x
 	debug-backtrace sgpio)
