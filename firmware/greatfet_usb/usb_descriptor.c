@@ -182,7 +182,8 @@ uint8_t usb0_descriptor_configuration_full_speed[] = {
 uint8_t usb0_descriptor_configuration_high_speed[] = {
 	9,                                 // bLength
 	USB_DESCRIPTOR_TYPE_CONFIGURATION, // bDescriptorType
-	USB_WORD(99),                      // wTotalLength
+	//USB_WORD(99),                      // wTotalLength
+	USB_WORD(49),                      // wTotalLength
 	0x04,                              // bNumInterfaces
 	0x01,                              // bConfigurationValue
 	0x00,                              // iConfiguration
