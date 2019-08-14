@@ -1,0 +1,6 @@
+[console_scripts]
+even-better-setuptools-git-version = even_better_setuptools_git_version:get_version
+
+[distutils.setup_keywords]
+version_config = even_better_setuptools_git_version:validate_version_config
+

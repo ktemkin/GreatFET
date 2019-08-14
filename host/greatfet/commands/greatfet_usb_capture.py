@@ -98,13 +98,14 @@ def main():
     device = parser.find_specified_device()
 
     # Bring our Rhododendron board online; and capture communication parameters.
-    buffer_size, endpoint = device.apis.usb_analyzer.initialize()
+    buffer_size, endpoint = device.apis.usb_analyzer.initialize(timeout=10000, comms_timeout=10000)
 
     # Print what we're doing and our status.
     log_function("Reading raw high-speed USB data!\n")
     log_function("Press Ctrl+C to stop reading data from device.")
 
     # If we have a target binary file, open the target filename and use that to store samples.
+    bin_file = None
     if args.binary:
         bin_file = open(args.binary, 'wb')
         bin_file_name = args.binary

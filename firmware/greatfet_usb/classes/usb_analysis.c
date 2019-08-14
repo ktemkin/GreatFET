@@ -21,6 +21,10 @@
 // For debug only.
 extern sgpio_t ulpi_register_mode;
 
+static bool phy_initialized = false;
+
+#undef pr_debug
+#define pr_debug pr_info
 
 static int ulpi_write_with_retries(uint8_t address, uint8_t data)
 {
@@ -30,6 +34,7 @@ static int ulpi_write_with_retries(uint8_t address, uint8_t data)
 	while (retries--) {
 		rc = ulpi_register_write(address, data);
 		if (rc == 0)  {
+			pr_debug("completed reg[%02x] := %02x after %d retries\n", address, data, 127 - retries);
 			return 0;
 		}
 
@@ -45,7 +50,13 @@ static int verb_initialize(struct command_transaction *trans)
 {
 	int rc;
 
-	(void)trans;
+	comms_response_add_uint32_t(trans, USB_STREAMING_BUFFER_SIZE);
+	comms_response_add_uint8_t(trans,  USB_STREAMING_IN_ADDRESS);
+
+	// If our PHY is already initialized, trivially return.
+	if (phy_initialized) {
+		return 0;
+	}
 
 	rhododendron_turn_off_led(LED_STATUS);
 
@@ -58,6 +69,13 @@ static int verb_initialize(struct command_transaction *trans)
 	delay_us(100000);
 
 
+	// Put the PHY into non-driving, high-speed mode for capture.
+	// TODO: do we want to support other capture speeds here, or should we use the Sigrok backend for that?
+	rc = ulpi_write_with_retries(0x04, 0b01001000);
+	if (rc) {
+		return rc;
+	}
+
 	// Swap D+ and D-.
 	rc = ulpi_write_with_retries(0x3a, 0b10);
 	if (rc) {
@@ -65,24 +83,18 @@ static int verb_initialize(struct command_transaction *trans)
 	}
 
 	// Disable OTG pulldowns.
+	// NOTE: we don't have to do this; putting the PHY into non-driving mode disables these.
+	/*
 	rc = ulpi_write_with_retries(0x0A, 0);
 	if (rc) {
 		return rc;
 	}
-
-	// FIXME: set this to pull up D+ as a demo
-	rc = ulpi_write_with_retries(0x04, 0b01001000);
-	if (rc) {
-		return rc;
-	}
+	*/
 
 	rhododendron_turn_on_led(LED_STATUS);
+	phy_initialized = true;
 
-	// Finally, tell the host how to read data from the capture pipe.
-	comms_response_add_uint32_t(trans, USB_STREAMING_BUFFER_SIZE);
-	comms_response_add_uint8_t(trans,  USB_STREAMING_IN_ADDRESS);
-
-	return rc;
+	return 0;
 }
 
 
@@ -95,7 +107,7 @@ static int verb_ulpi_register_write(struct command_transaction *trans)
 		return EBADMSG;
 	}
 
-	return ulpi_register_write(address, value);
+	return ulpi_write_with_retries(address, value);
 }
 
 
@@ -114,6 +126,7 @@ static int verb_dump_register_sgpio_config(struct command_transaction *trans)
 
 static int verb_start_capture(struct command_transaction *trans)
 {
+	pr_info("usb_analyzer: starting USB capture\n");
 	return rhododendron_start_capture();
 
 }
@@ -122,6 +135,7 @@ static int verb_stop_capture(struct command_transaction *trans)
 {
 	(void)trans;
 	rhododendron_stop_capture();
+	pr_info("usb_analyzer: usb capture ended\n");
 
 	return 0;
 }

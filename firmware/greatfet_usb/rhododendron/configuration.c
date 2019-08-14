@@ -523,7 +523,7 @@ int rhododendron_early_init(void)
 
 	rhododendron_turn_off_led(LED_STATUS);
 
-	//set_up_clock_output();
+	set_up_clock_output();
 
 	// Set up the PHY's reset pin.
 	rc = set_up_phy_reset();
