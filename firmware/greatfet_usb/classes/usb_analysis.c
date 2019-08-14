@@ -22,9 +22,26 @@
 extern sgpio_t ulpi_register_mode;
 
 static bool phy_initialized = false;
+static bool capture_running = false;
+static bool capture_triggered = false;
 
 #undef pr_debug
 #define pr_debug pr_info
+
+
+void service_usb_analysis(void)
+{
+	if (capture_triggered && !capture_running) {
+		rhododendron_start_capture();
+		capture_running = true;
+	}
+	if (!capture_triggered && capture_running) {
+		rhododendron_stop_capture();
+		capture_running = false;
+	}
+
+}
+
 
 static int ulpi_write_with_retries(uint8_t address, uint8_t data)
 {
@@ -69,6 +86,13 @@ static int verb_initialize(struct command_transaction *trans)
 	delay_us(100000);
 
 
+	// Disable OTG pulldowns.
+	// NOTE: we don't have to do this; putting the PHY into non-driving mode disables these.
+	rc = ulpi_write_with_retries(0x0A, 0);
+	if (rc) {
+		return rc;
+	}
+
 	// Put the PHY into non-driving, high-speed mode for capture.
 	// TODO: do we want to support other capture speeds here, or should we use the Sigrok backend for that?
 	rc = ulpi_write_with_retries(0x04, 0b01001000);
@@ -82,14 +106,6 @@ static int verb_initialize(struct command_transaction *trans)
 		return rc;
 	}
 
-	// Disable OTG pulldowns.
-	// NOTE: we don't have to do this; putting the PHY into non-driving mode disables these.
-	/*
-	rc = ulpi_write_with_retries(0x0A, 0);
-	if (rc) {
-		return rc;
-	}
-	*/
 
 	rhododendron_turn_on_led(LED_STATUS);
 	phy_initialized = true;
@@ -126,16 +142,17 @@ static int verb_dump_register_sgpio_config(struct command_transaction *trans)
 
 static int verb_start_capture(struct command_transaction *trans)
 {
-	pr_info("usb_analyzer: starting USB capture\n");
-	return rhododendron_start_capture();
+	pr_info("usb_analyzer: force-triggering USB capture\n");
+	capture_triggered = true;
 
+	return 0;
 }
 
 static int verb_stop_capture(struct command_transaction *trans)
 {
 	(void)trans;
-	rhododendron_stop_capture();
-	pr_info("usb_analyzer: usb capture ended\n");
+	pr_info("usb_analyzer: terminating triggered USB capture\n");
+	capture_triggered = false;
 
 	return 0;
 }

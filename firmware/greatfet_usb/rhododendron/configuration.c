@@ -336,16 +336,6 @@ static int sanity_check_environment(void)
 
 
 
-// FIXME: move this back to usb_analysis.c!
-//  XXX: debug_input is very temporary
-static gpio_pin_t debug_input = { .port = 3, .pin = 3};
-void service_usb_analysis(void)
-{
-	// XXX: use the LED to detect a change in our debug input
-	gpio_set_pin_value(gpio_leds[LED_TRIGGERED], !gpio_get_pin_value(debug_input));
-}
-
-
 void rhododendron_turn_on_led(rhododendron_led_t led)
 {
 	// TODO: if the LED wasn't set up properly, skip it
@@ -536,10 +526,6 @@ int rhododendron_early_init(void)
 	if (rc) {
 		return rc;
 	}
-
-	// XXX temporary:
-	gpio_configure_pinmux_and_resistors(debug_input, SCU_PULLDOWN);
-	gpio_set_pin_direction(debug_input, false);
 
 	return 0;
 }

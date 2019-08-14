@@ -72,6 +72,7 @@ static sgpio_function_t usb_capture_functions[] = {
 		// We're only interested in values that the PHY indicates are valid data.
 		.shift_clock_qualifier       = SGPIO_QUALIFIER_SGPIO10,
 		.shift_clock_qualifier_input = &ulpi_nxt_pin,
+		.shift_clock_qualifier_is_active_low = false,
 
 		// Capture our data into the USB bulk buffer, all ready to be sent up to the host.
 		.buffer                      = usb_bulk_buffer,

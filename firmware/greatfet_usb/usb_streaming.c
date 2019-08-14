@@ -27,6 +27,8 @@ static bool usb_streaming_enabled = false;
 static uint32_t *position_in_buffer;
 static uint32_t *data_in_buffer;
 
+uint32_t read_position;
+
 
 // XXX
 static inline void cm_enable_interrupts(void)
@@ -77,6 +79,41 @@ static int streaming_schedule_usb_transfer_in(int buffer_number)
 }
 
 
+static void service_bursty_usb_streaming_in(void)
+{
+	uint32_t data_to_copy = *data_in_buffer;
+
+	pr_info("data available: %d\n", data_to_copy);
+
+	if (data_to_copy < USB_STREAMING_MIN_TRANSFER_SIZE) {
+		return;
+	}
+
+	if (data_to_copy > USB_STREAMING_BUFFER_SIZE) {
+		data_to_copy = USB_STREAMING_BUFFER_SIZE;
+	}
+
+	if ((read_position + data_to_copy) > sizeof(usb_bulk_buffer))
+	{
+		data_to_copy = sizeof(usb_bulk_buffer) - read_position;
+	}
+
+	usb_transfer_schedule_wait(
+		&usb0_endpoint_bulk_in,
+ 		&usb_bulk_buffer[read_position],
+		data_to_copy, 0, 0, 0);
+
+	// ... and mark those samples as no longer pending transfer.
+	cm_disable_interrupts();
+	*data_in_buffer -= data_to_copy;
+	read_position = (read_position + data_to_copy) % sizeof(usb_bulk_buffer);
+	cm_enable_interrupts();
+
+	led_toggle(LED4);
+}
+
+
+
 static void service_usb_streaming_in(void)
 {
 	static unsigned int phase = 1;
@@ -121,7 +158,8 @@ void service_usb_streaming(void)
 	}
 
 	// TODO: support USB streaming out, too
-	service_usb_streaming_in();
+	//service_usb_streaming_in();
+	service_bursty_usb_streaming_in();
 }
 
 /**
@@ -134,6 +172,8 @@ void usb_streaming_start_streaming_to_host(uint32_t *user_position_in_buffer, ui
 	// Store our references to the user variables to be updated.
 	position_in_buffer = user_position_in_buffer;
 	data_in_buffer     = user_data_in_buffer;
+
+	position_in_buffer = 0;
 
 	// And enable USB streaming.
 	// FIXME: support out streaming, too
