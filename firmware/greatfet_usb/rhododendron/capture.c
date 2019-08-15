@@ -47,6 +47,8 @@ sgpio_pin_configuration_t ulpi_stp_pin =
 	{ .sgpio_pin = 9,  .scu_group = 1, .scu_pin =  13, .pull_resistors = SCU_PULLDOWN};
 sgpio_pin_configuration_t ulpi_nxt_pin =
 	{ .sgpio_pin = 10, .scu_group = 1, .scu_pin =  14, .pull_resistors = SCU_NO_PULL};
+sgpio_pin_configuration_t ulpi_dir_pin =
+	{ .sgpio_pin = 11, .scu_group = 1, .scu_pin =  32, .pull_resistors = SCU_NO_PULL};
 
 
 
@@ -65,13 +67,30 @@ static sgpio_function_t usb_capture_functions[] = {
 		.bus_width                   = ARRAY_SIZE(ulpi_data_pins),
 
 		// We'll shift in time with rising edges of the PHY clock.
+		/*
 		.shift_clock_source          = ulpi_clock_source,
 		.shift_clock_edge            = SGPIO_CLOCK_EDGE_RISING,
 		.shift_clock_input           = &ulpi_clk_pin,
+		*/
+
+		// Test: clock our shifting on the edge of NXT.
+		.shift_clock_source          = SGPIO_CLOCK_SOURCE_SGPIO10,
+		.shift_clock_edge            = SGPIO_CLOCK_EDGE_FALLING,
+		.shift_clock_input           = &ulpi_nxt_pin,
 
 		// We're only interested in values that the PHY indicates are valid data.
+		/* // XXX
 		.shift_clock_qualifier       = SGPIO_QUALIFIER_SGPIO10,
 		.shift_clock_qualifier_input = &ulpi_nxt_pin,
+		*/
+
+		/*
+		.shift_clock_qualifier       = SGPIO_QUALIFIER_SGPIO11,
+		.shift_clock_qualifier_input = &ulpi_dir_pin,
+		*/
+		.shift_clock_qualifier = SGPIO_ALWAYS_SHIFT_ON_SHIFT_CLOCK,
+
+
 		.shift_clock_qualifier_is_active_low = false,
 
 		// Capture our data into the USB bulk buffer, all ready to be sent up to the host.
@@ -87,7 +106,7 @@ static sgpio_function_t usb_capture_functions[] = {
 /**
  * Core USB capture SGPIO configuration.
  */
-static sgpio_t analyzer  = {
+sgpio_t analyzer  = {
 	.functions      = usb_capture_functions,
 	.function_count = ARRAY_SIZE(usb_capture_functions),
 };

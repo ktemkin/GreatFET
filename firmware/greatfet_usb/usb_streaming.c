@@ -83,8 +83,6 @@ static void service_bursty_usb_streaming_in(void)
 {
 	uint32_t data_to_copy = *data_in_buffer;
 
-	pr_info("data available: %d\n", data_to_copy);
-
 	if (data_to_copy < USB_STREAMING_MIN_TRANSFER_SIZE) {
 		return;
 	}

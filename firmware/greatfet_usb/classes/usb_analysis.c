@@ -19,7 +19,7 @@
 #define CLASS_NUMBER_SELF (0x113)
 
 // For debug only.
-extern sgpio_t ulpi_register_mode;
+extern sgpio_t analyzer;
 
 static bool phy_initialized = false;
 static bool capture_running = false;
@@ -85,23 +85,16 @@ static int verb_initialize(struct command_transaction *trans)
 
 	delay_us(100000);
 
-
-	// Disable OTG pulldowns.
-	// NOTE: we don't have to do this; putting the PHY into non-driving mode disables these.
-	rc = ulpi_write_with_retries(0x0A, 0);
+	// Swap D+ and D-.
+	rc = ulpi_write_with_retries(0x39, 0b10);
 	if (rc) {
 		return rc;
 	}
+
 
 	// Put the PHY into non-driving, high-speed mode for capture.
 	// TODO: do we want to support other capture speeds here, or should we use the Sigrok backend for that?
 	rc = ulpi_write_with_retries(0x04, 0b01001000);
-	if (rc) {
-		return rc;
-	}
-
-	// Swap D+ and D-.
-	rc = ulpi_write_with_retries(0x3a, 0b10);
 	if (rc) {
 		return rc;
 	}
@@ -135,7 +128,7 @@ static int verb_dump_register_sgpio_config(struct command_transaction *trans)
 		return EINVAL;
 	}
 
-	sgpio_dump_configuration(LOGLEVEL_INFO, &ulpi_register_mode, include_unused);
+	sgpio_dump_configuration(LOGLEVEL_INFO, &analyzer, include_unused);
 	return 0;
 }
 

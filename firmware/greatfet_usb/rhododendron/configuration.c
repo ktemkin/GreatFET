@@ -188,7 +188,7 @@ static sgpio_function_t ulpi_register_functions[] = {
 /**
  * Logic analyzer configuration using SGPIO.
  */
-sgpio_t ulpi_register_mode  = {
+static sgpio_t ulpi_register_mode  = {
 	.functions      = ulpi_register_functions,
 	.function_count = ARRAY_SIZE(ulpi_register_functions),
 };
@@ -446,6 +446,11 @@ int boot_up_phy(void)
 	int rc;
 
 	pr_info("rhododendron: booting up PHY!\n");
+
+	// Clear the PHY's (active-low) reset, allowing it to start up.
+	gpio_set_pin_value(ulpi_phy_reset, false);
+
+	delay_us(10000);
 
 	// Clear the PHY's (active-low) reset, allowing it to start up.
 	gpio_set_pin_value(ulpi_phy_reset, true);
