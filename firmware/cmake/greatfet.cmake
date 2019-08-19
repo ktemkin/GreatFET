@@ -82,6 +82,28 @@ function(add_greatfet_targets EXECUTABLE_NAME)
 endfunction(add_greatfet_targets)
 
 
+
+#
+# All in one function that generates a set of GreatFET executables (and relevant commands).
+# Arguments: [binary_name] [sources...]
+#
+function(add_m0_sources EXECUTABLE_NAME)
+
+	# Create our executables.
+	# TODO: Allow the m0 to use the relevant libraries.
+	create_secondary_cpu_executable(${EXECUTABLE_NAME}_m0.bin ${ARGN})
+
+	target_link_options(${EXECUTABLE_NAME}.bin.elf PRIVATE
+		-Wl,--just-symbols=${EXECUTABLE_NAME}_m0.bin.elf
+	)
+
+	# Ensure the m0 sources are built before their executable.
+	add_dependencies(${EXECUTABLE_NAME} ${EXECUTABLE_NAME}_m0.bin)
+
+
+endfunction(add_m0_sources)
+
+
 # Ensure we always know how to build the GreatFET common library (libgreatfet).
 add_subdirectory(${PATH_GREATFET_FIRMWARE_COMMON} common)
 

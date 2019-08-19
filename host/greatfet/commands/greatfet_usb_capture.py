@@ -77,20 +77,28 @@ def main():
 
     transfer_buffer = allocate_transfer_buffer(buffer_size)
 
+    total_captured = 0
+
     try:
         while True:
 
             # Capture data from the device, and unpack it.
-            device.comms.device.read(endpoint, transfer_buffer, 0)
+            try:
+                new_samples = device.comms.device.read(endpoint, transfer_buffer, SAMPLE_DELIVERY_TIMEOUT_MS)
+                samples = bytes(transfer_buffer[0:new_samples - 1])
 
-            # ... and pop it into the to-be-processed queue.
-            samples = bytes(transfer_buffer)
+                total_captured += new_samples
+                log_function("Captured {} bytes.".format(total_captured), end="\r")
 
-            # Output the samples to the appropriate targets.
-            if args.binary:
-                bin_file.write(samples)
-            if args.write_to_stdout:
-                sys.stdout.buffer.write(samples)
+
+                # Output the samples to the appropriate targets.
+                if args.binary:
+                    bin_file.write(samples)
+                if args.write_to_stdout:
+                    sys.stdout.buffer.write(samples)
+            except usb.core.USBError as e:
+                if e.errno != errno.ETIMEDOUT:
+                    raise
 
     except KeyboardInterrupt:
         pass

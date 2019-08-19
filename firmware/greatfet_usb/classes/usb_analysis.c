@@ -85,16 +85,17 @@ static int verb_initialize(struct command_transaction *trans)
 
 	delay_us(100000);
 
-	// Swap D+ and D-.
-	rc = ulpi_write_with_retries(0x39, 0b10);
+
+	// Put the PHY into non-driving, high-speed mode for capture.
+	// TODO: do we want to support other capture speeds here, or should we use the Sigrok backend for that?
+	rc = ulpi_write_with_retries(0x04, 0b01001000);
 	if (rc) {
 		return rc;
 	}
 
 
-	// Put the PHY into non-driving, high-speed mode for capture.
-	// TODO: do we want to support other capture speeds here, or should we use the Sigrok backend for that?
-	rc = ulpi_write_with_retries(0x04, 0b01001000);
+	// Swap D+ and D-.
+	rc = ulpi_write_with_retries(0x39, 0b10);
 	if (rc) {
 		return rc;
 	}

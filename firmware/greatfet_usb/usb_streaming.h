@@ -33,7 +33,8 @@ void service_usb_streaming(void);
 /**
  * Sets up a task thread that will rapidly stream data to/from a USB host.
  */
-void usb_streaming_start_streaming_to_host(uint32_t *user_position_in_buffer, uint32_t *user_data_in_buffer);
+void usb_streaming_start_streaming_to_host(uint32_t *volatile user_position_in_buffer,
+	uint32_t *volatile user_data_in_buffer);
 
 
 /**

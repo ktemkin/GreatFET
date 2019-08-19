@@ -36,7 +36,12 @@ add_greatfet_targets(${PROJECT_NAME}
 	# Rhododendron functionality.
 	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/configuration.c
 	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/capture.c
+	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/sgpio_m0_container.S
 )
+add_m0_sources(${PROJECT_NAME}
+	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/sgpio_m0.S
+)
+
 use_libgreat_modules(${PROJECT_NAME} allocator comms usb usb_comms gpio ad970x
 	debug-backtrace sgpio)
 
@@ -46,3 +51,4 @@ use_libgreat_modules(${PROJECT_NAME} allocator comms usb usb_comms gpio ad970x
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.bin
 	DESTINATION ${PATH_GREATFET}/host/greatfet/assets
 )
+

@@ -55,6 +55,7 @@ void init_usb0(void) {
 	usb_endpoint_init(&usb0_endpoint_bulk_in);
 
 	nvic_set_priority(NVIC_USB0_IRQ, 254);
+	nvic_set_priority(NVIC_SGPIO_IRQ, 0);
 
 	usb_run(&usb_peripherals[0]);
 }
