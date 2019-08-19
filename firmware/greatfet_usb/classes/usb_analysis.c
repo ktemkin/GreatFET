@@ -29,6 +29,9 @@ static bool capture_triggered = false;
 #define pr_debug pr_info
 
 
+static gpio_pin_t ulpi_stp_gpio  = { .port = 1, .pin = 6  };
+
+
 void service_usb_analysis(void)
 {
 	if (capture_triggered && !capture_running) {
@@ -99,6 +102,12 @@ static int verb_initialize(struct command_transaction *trans)
 	if (rc) {
 		return rc;
 	}
+
+	// Stick STP down at zero, as it's 1) no longer needed, and 2) having it go high
+	// would interfere with the PHY's delivery of USB data.
+	gpio_configure_pinmux(ulpi_stp_gpio);
+	gpio_set_pin_value(ulpi_stp_gpio, 0);
+	gpio_set_pin_direction(ulpi_stp_gpio, true);
 
 
 	rhododendron_turn_on_led(LED_STATUS);
