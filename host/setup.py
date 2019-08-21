@@ -8,7 +8,7 @@ def read(fname):
         return f.read()
 
 install_req = ['ipython']
-if sys.version_info[0] < 3 and 'bdist_wheel' not in sys.argv:
+if sys:.version_info[0] < 3 and 'bdist_wheel' not in sys.argv:
     install_req.remove('ipython')
     install_req.append('ipython<6')
 

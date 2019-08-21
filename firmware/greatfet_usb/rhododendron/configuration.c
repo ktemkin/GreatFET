@@ -25,12 +25,6 @@
 //#include <drivers/sct.h>
 
 
-// If you have a v0.2 Rhododendron (or earlier) and haven't made the bodges I have
-// (looking at you, @tannewt), you'll probably want to undefine these -- I've bodged in
-// some automated test connections, and will probably add them to the design in r0.3. ~KT
-//#define RHODODENDRON_SUPPORTS_VOLTAGE_SANITY_CHECKING
-//#define RHODODENDRON_SUPPORTS_CLOCK_SANITY_CHECKING
-
 static gpio_pin_t gpio_leds[] = {
 	[LED_VBUS]      = { .port = 2, .pin = 14 },
 	[LED_TRIGGERED] = { .port = 2, .pin = 13 },
@@ -49,10 +43,27 @@ static uint32_t register_nxt_buffer;
 /**
  * Import our ULPI pins from the core capture code.
  */
-extern sgpio_pin_configuration_t ulpi_data_pins[8];
-extern sgpio_pin_configuration_t ulpi_clk_pin;
-extern sgpio_pin_configuration_t ulpi_stp_pin;
-extern sgpio_pin_configuration_t ulpi_nxt_pin;
+static sgpio_pin_configuration_t ulpi_data_pins[] = {
+	{ .sgpio_pin = 0,  .scu_group = 0, .scu_pin =  0, .pull_resistors = SCU_NO_PULL},
+	{ .sgpio_pin = 1,  .scu_group = 0, .scu_pin =  1, .pull_resistors = SCU_NO_PULL},
+	{ .sgpio_pin = 2,  .scu_group = 1, .scu_pin = 15, .pull_resistors = SCU_NO_PULL},
+	{ .sgpio_pin = 3,  .scu_group = 1, .scu_pin = 16, .pull_resistors = SCU_NO_PULL},
+	{ .sgpio_pin = 4,  .scu_group = 6, .scu_pin =  3, .pull_resistors = SCU_NO_PULL},
+	{ .sgpio_pin = 5,  .scu_group = 6, .scu_pin =  6, .pull_resistors = SCU_NO_PULL},
+	{ .sgpio_pin = 6,  .scu_group = 2, .scu_pin =  2, .pull_resistors = SCU_NO_PULL},
+	{ .sgpio_pin = 7,  .scu_group = 6, .scu_pin =  8, .pull_resistors = SCU_NO_PULL},
+};
+
+
+static sgpio_pin_configuration_t ulpi_clk_pin =
+	{ .sgpio_pin = 8,  .scu_group = 9, .scu_pin =  6,  .pull_resistors = SCU_NO_PULL};
+static sgpio_pin_configuration_t ulpi_stp_pin =
+	{ .sgpio_pin = 9,  .scu_group = 1, .scu_pin =  13, .pull_resistors = SCU_PULLDOWN};
+static sgpio_pin_configuration_t ulpi_nxt_pin =
+	{ .sgpio_pin = 10, .scu_group = 1, .scu_pin =  14, .pull_resistors = SCU_PULLDOWN};
+static sgpio_pin_configuration_t ulpi_dir_pin =
+	{ .sgpio_pin = 11, .scu_group = 1, .scu_pin =  17, .pull_resistors = SCU_NO_PULL};
+
 
 static const sgpio_clock_source_t ulpi_clock_source = SGPIO_CLOCK_SOURCE_SGPIO08;
 
@@ -486,8 +497,17 @@ int set_up_clock_output(void)
 	platform_scu_registers_t *scu = platform_get_scu_registers();
 	platform_clock_generation_register_block_t *cgu = get_platform_clock_generation_registers();
 
-	// Grab the 60MHz clock out from Divider B, which divides down the main USB PLL.
+	// Enable the generic CLKOUT output.
 	platform_enable_base_clock(&cgu->out);
+
+
+#ifdef RHODODENDRON_USE_USB1_CLK_AS_ULPI_CLOCK
+	// If we're generating the ULPI clock directly, use DIVB as the source.
+	platform_select_base_clock_source(&cgu->out, CLOCK_SOURCE_DIVIDER_B_OUT);
+
+	// Otherwise, we'll default to the audio PLL, which can generate a 26MHz reference clock.
+#endif
+
 
 	// Configure the CLK2 pin to be a high-speed output.
 	platform_scu_pin_configuration_t clk2_config = {
@@ -499,15 +519,6 @@ int set_up_clock_output(void)
 	};
 	scu->clk[2] = clk2_config;
 
-	// Convert J1_P38 to a CLKOUT pin.
-	platform_scu_pin_configuration_t p38_config = {
-		.function = 4,
-		.pull_resistors = SCU_NO_PULL,
-		.input_buffer_enabled = 0,
-		.use_fast_slew = 1,
-		.disable_glitch_filter = 1,
-	};
-	platform_scu_configure_pin(1, 19, p38_config);
 
 	return 0;
 }

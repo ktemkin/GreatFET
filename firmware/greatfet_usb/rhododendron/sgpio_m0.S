@@ -44,11 +44,6 @@ m0_vector_table:
 usb_buffer_position: .word 0
 
 
-// XXX: intiial debug word to demonstrate that the m0 is working properly
-.global validation_word
-validation_word: .word 0xdeadbeef
-
-
 .global m0_reset_handler
 .align 4
 .thumb_func
@@ -56,11 +51,6 @@ m0_reset_handler:
 
 	#ldr r0, =__StackTop
 	#msr msp, r0
-
-	ldr r0, =0xC001c0de
-	ldr r1, =validation_word
-	str r0, [r1]
-
 
 //
 // SGPIO dynamically-generated ISR template
