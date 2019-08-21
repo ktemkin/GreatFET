@@ -33,10 +33,20 @@ def allocate_transfer_buffer(buffer_size):
 
 def main():
 
+    SPEED_HIGH = 0
+    SPEED_FULL = 1
+    SPEED_LOW  = 2
+
     # Set up our argument parser.
     parser = GreatFETArgumentParser(description="Simple Rhododendron capture utility for GreatFET.", verbose_by_default=True)
     parser.add_argument('-o', '-b', '--binary', dest='binary', metavar='<filename>', type=str,
                         help="Write the raw samples captured to a file with the provided name.")
+    parser.add_argument('-F', '--full-speed', dest='speed', action='store_const', const=SPEED_FULL, default=SPEED_HIGH,
+                        help="Capture full-speed data.")
+    parser.add_argument('-L', '--low-speed', dest='speed', action='store_const', const=SPEED_LOW, default=SPEED_HIGH,
+                        help="Capture low-speed data.")
+    parser.add_argument('-H', '--high-speed', dest='speed', action='store_const', const=SPEED_HIGH,
+                        help="Capture high-speed data. The default.")
     parser.add_argument('-O', '--stdout', dest='write_to_stdout', action='store_true',
                          help='Provide this option to write the raw binary samples to the standard out. Implies -q.')
 
@@ -60,7 +70,7 @@ def main():
     device = parser.find_specified_device()
 
     # Bring our Rhododendron board online; and capture communication parameters.
-    buffer_size, endpoint = device.apis.usb_analyzer.initialize(timeout=10000, comms_timeout=10000)
+    buffer_size, endpoint = device.apis.usb_analyzer.initialize(args.speed, timeout=10000, comms_timeout=10000)
 
     # Print what we're doing and our status.
     log_function("Reading raw high-speed USB data!\n")

@@ -70,6 +70,8 @@ static int verb_initialize(struct command_transaction *trans)
 {
 	int rc;
 
+	uint8_t capture_speed = comms_argument_parse_uint8_t(trans) & 0b11;
+
 	comms_response_add_uint32_t(trans, USB_STREAMING_BUFFER_SIZE);
 	comms_response_add_uint8_t(trans,  USB_STREAMING_IN_ADDRESS);
 
@@ -89,9 +91,8 @@ static int verb_initialize(struct command_transaction *trans)
 	delay_us(100000);
 
 
-	// Put the PHY into non-driving, high-speed mode for capture.
-	// TODO: do we want to support other capture speeds here, or should we use the Sigrok backend for that?
-	rc = ulpi_write_with_retries(0x04, 0b01001000);
+	// Put the PHY into non-driving mode, and select the capture speed.
+	rc = ulpi_write_with_retries(0x04, 0b01001000 | capture_speed);
 	if (rc) {
 		return rc;
 	}
@@ -164,7 +165,7 @@ static int verb_stop_capture(struct command_transaction *trans)
 static struct comms_verb _verbs[] = {
 
 		// Control.
-		{  .name = "initialize", .handler = verb_initialize, .in_signature = "",
+		{  .name = "initialize", .handler = verb_initialize, .in_signature = "<B",
 			.out_signature = "<IB", .out_param_names = "buffer_size, endpoint",
 			.doc = "configures the target Rhododendendron board for capture (and pass-through)" },
 
