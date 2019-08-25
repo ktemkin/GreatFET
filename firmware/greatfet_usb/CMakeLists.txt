@@ -36,19 +36,23 @@ add_greatfet_targets(${PROJECT_NAME}
 	# Rhododendron functionality.
 	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/configuration.c
 	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/capture.c
-	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/sgpio_m0_container.S
+	#${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/sgpio_m0_container.S
 )
-add_m0_sources(${PROJECT_NAME}
-	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/sgpio_m0.S
-)
-
 use_libgreat_modules(${PROJECT_NAME} allocator comms usb usb_comms gpio ad970x
 	debug-backtrace sgpio)
 
-# TODO: include libgreat's m0_coprocessor include, to allow m0 code to be added
+
+# Add a loadable for the Rhododendron baseband.
+add_m0_loadable(rhododendron_m0 ${PROJECT_NAME}
+	${CMAKE_CURRENT_SOURCE_DIR}/rhododendron/rhododendron_m0.S
+)
+
 
 # Allow the firmware to be included with the host distribution.
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.bin
+install(FILES
+	${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.bin
+	${CMAKE_CURRENT_BINARY_DIR}/rhododendron_m0.bin
+
 	DESTINATION ${PATH_GREATFET}/host/greatfet/assets
 )
 

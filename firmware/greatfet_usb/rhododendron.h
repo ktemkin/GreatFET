@@ -135,4 +135,11 @@ int rhododendron_start_capture(void);
  */
 void rhododendron_stop_capture(void);
 
+
+/**
+ * Rhododenron background "thread".
+ */
+void service_rhododendron(void);
+
+
 #endif

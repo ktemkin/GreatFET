@@ -8,7 +8,7 @@ def read(fname):
         return f.read()
 
 install_req = ['ipython']
-if sys:.version_info[0] < 3 and 'bdist_wheel' not in sys.argv:
+if sys.version_info[0] < 3 and 'bdist_wheel' not in sys.argv:
     install_req.remove('ipython')
     install_req.append('ipython<6')
 
@@ -36,6 +36,7 @@ setup(
             'greatfet_dmesg = greatfet.commands.greatfet_dmesg:main',
             'greatfet_msp430 = greatfet.commands.greatfet_msp430:main',
             'greatfet_pattern = greatfet.commands.greatfet_pattern:main',
+            'greatfet_loadable = greatfet.commands.greatfet_loadable:main',
             'greatfet_usb_capture = greatfet.commands.greatfet_usb_capture:main',
         ],
     },

@@ -10,10 +10,16 @@
 .equ SGPIO_SHADOW_REGISTERS_BASE,          0x40101100
 .equ SGPIO_EXCHANGE_INTERRUPT_CLEAR_REG,   0x40101F30
 .equ SGPIO_EXCHANGE_INTERRUPT_STATUS_REG,  0x40101F2C
-.equ USB_BULK_BUFFER,                      0x20008000
+.equ SGPIO_GPIO_INPUT,                     0x40101210
 
-// FIXME: pick actual location
-.equ POSITION_IN_USB_BUFFER,             0x20007000
+
+// Buffer that we're funneling data to.
+//.equ TARGET_DATA_BUFFER,                   usb_bulk_buffer
+//.equ TARGET_BUFFER_POSITION,               usb_buffer_position
+//.equ TARGET_BUFFER_MASK,                   0x7fff
+.equ TARGET_DATA_BUFFER,                   large_data_buffer
+.equ TARGET_BUFFER_POSITION,               capture_buffer_write_position
+.equ TARGET_BUFFER_MASK,                   0x7fff
 
 .global m0_vector_table
 
@@ -40,23 +46,16 @@ m0_vector_table:
 
 .thumb
 
-.global usb_buffer_position
-usb_buffer_position: .word 0
-
-
 .global m0_reset_handler
 .align 4
 .thumb_func
 m0_reset_handler:
 
-	#ldr r0, =__StackTop
-	#msr msp, r0
 
-//
-// SGPIO dynamically-generated ISR template
-//
 .thumb_func
-capture_sgpio:
+waiting_for_sgpio:
+
+core_sgpio_processing:
 
 	// Spin until we're ready to handle an SGPIO packet:
 	// Grab the exchange interrupt staus...
@@ -67,7 +66,7 @@ capture_sgpio:
 	lsr r0, #1
 
 	// ... and if not, jump back to the beginning.
-	bcc capture_sgpio
+	bcc waiting_for_sgpio
 
 	// Clear the interrupt pending bits for the SGPIO slices we're working with.
 	ldr r0, =SGPIO_EXCHANGE_INTERRUPT_CLEAR_REG
@@ -78,10 +77,10 @@ capture_sgpio:
 	ldr r7, =SGPIO_SHADOW_REGISTERS_BASE
 
 	// ... and grab the address of the buffer segment we want to write to.
-	ldr r0, =USB_BULK_BUFFER          // r0 = &buffer
-	ldr r3, =usb_buffer_position      // r3 = &position_in_buffer
+	ldr r0, =TARGET_DATA_BUFFER       // r0 = &buffer
+	ldr r3, =TARGET_BUFFER_POSITION   // r3 = &position_in_buffer
 	ldr r2, [r3]                      // r2 = position_in_buffer
-	add r6, r0, r2                    // r0 = write_target = &buffer + position_in_buffer
+	add r6, r0, r2                    // r6 = write_target = &buffer + position_in_buffer
 
 	mov r8, r3                        // Store &position_in_buffer.
 
@@ -105,14 +104,14 @@ capture_sgpio:
 	stm r6!, {r0-r1}
 
 	// Finally, update the buffer location.
-	ldr r0, =0x7fff        // r0 => modulus flags
+	ldr r0, =TARGET_BUFFER_MASK
 	and r0, r6, r0         // r0 = (position_in_buffer + size_copied) % buffer_size
 
 	// Restore &position_in_buffer, and store the new position there.
 	mov r1, r8
 	str r0, [r1]           // position_in_buffer = (position_in_buffer + size_copied) % buffer_size
 
-	b capture_sgpio
+	b core_sgpio_processing
 
 
 #

@@ -20,7 +20,7 @@ from zipfile import ZipFile
 
 import greatfet
 
-from greatfet import GreatFET
+from greatfet import GreatFET, find_greatfet_asset
 from greatfet.utils import GreatFETArgumentParser, log_silent, log_error
 
 # Default sample-delivery timeout.
@@ -29,6 +29,15 @@ SAMPLE_DELIVERY_TIMEOUT_MS   = 3000
 
 def allocate_transfer_buffer(buffer_size):
     return array.array('B', bytes(buffer_size))
+
+
+def read_rhododendron_m0_loadable():
+    """ Read the contents of the default Rhododendron loadable from the tools distribution. """
+
+    filename = os.getenv('RHODODENDRON_M0_BIN', find_greatfet_asset('rhododendron_m0.bin'))
+
+    with open(filename, 'rb') as f:
+        return f.read()
 
 
 def main():
@@ -41,6 +50,8 @@ def main():
     parser = GreatFETArgumentParser(description="Simple Rhododendron capture utility for GreatFET.", verbose_by_default=True)
     parser.add_argument('-o', '-b', '--binary', dest='binary', metavar='<filename>', type=str,
                         help="Write the raw samples captured to a file with the provided name.")
+    parser.add_argument('--m0', dest="m0", type=argparse.FileType('rb'), metavar='<filename>',
+                        help="loads the specific m0 coprocessor 'loadable' instead of the default Rhododendron one")
     parser.add_argument('-F', '--full-speed', dest='speed', action='store_const', const=SPEED_FULL, default=SPEED_HIGH,
                         help="Capture full-speed data.")
     parser.add_argument('-L', '--low-speed', dest='speed', action='store_const', const=SPEED_LOW, default=SPEED_HIGH,
@@ -71,6 +82,24 @@ def main():
 
     # Bring our Rhododendron board online; and capture communication parameters.
     buffer_size, endpoint = device.apis.usb_analyzer.initialize(args.speed, timeout=10000, comms_timeout=10000)
+
+    # $Load the Rhododendron firmware loadable into memory...
+    try:
+        if args.m0:
+            data = args.m0.read()
+        else:
+            data = read_rhododendron_m0_loadable()
+    except (OSError, TypeError):
+        log_error("Can't find a Rhododendron m0 program to load!")
+        log_error("We can't run without one.")
+        sys.exit(-1)
+
+    # Debug only: setup a pin to track when we're handling SGPIO data.
+    debug_pin = device.gpio.get_pin('J1_P3')
+    debug_pin.set_direction(debug_pin.DIRECTION_OUT)
+
+    # ... and then run it on our m0 coprocessor.
+    device.m0.run_loadable(data)
 
     # Print what we're doing and our status.
     log_function("Reading raw high-speed USB data!\n")

@@ -47,6 +47,7 @@ static int verb_load_m0_page(struct command_transaction *trans)
 static int verb_start_m0(struct command_transaction *trans)
 {
 	(void)trans;
+	pr_info("M0 core started.\n");
 	platform_start_m0_core(&_m0_data_region);
 
 	return 0;
@@ -56,6 +57,8 @@ static int verb_start_m0(struct command_transaction *trans)
 static int verb_halt_m0(struct command_transaction *trans)
 {
 	(void)trans;
+
+	pr_info("M0 core halted.\n");
 	platform_halt_m0_core();
 
 	return 0;

@@ -27,6 +27,14 @@
 #include <libopencm3/lpc43xx/ipc.h>
 
 
+extern uint8_t large_data_buffer[16384];
+
+volatile uint32_t usb_buffer_position;
+
+volatile uint32_t capture_buffer_write_position;
+uint32_t capture_buffer_read_position;
+
+
 /**
  * ULPI data pins for Rhododendron boards.
  */
@@ -43,16 +51,10 @@ static sgpio_pin_configuration_t ulpi_data_pins[] = {
 
 
 /**
- * ULPI control pins.
+ * ULPI control pins (as used here).
  */
-static sgpio_pin_configuration_t ulpi_clk_pin =
-	{ .sgpio_pin = 8,  .scu_group = 9, .scu_pin =  6,  .pull_resistors = SCU_NO_PULL};
-static sgpio_pin_configuration_t ulpi_stp_pin =
-	{ .sgpio_pin = 9,  .scu_group = 1, .scu_pin =  13, .pull_resistors = SCU_PULLDOWN};
 static sgpio_pin_configuration_t ulpi_nxt_pin =
 	{ .sgpio_pin = 10, .scu_group = 1, .scu_pin =  14, .pull_resistors = SCU_PULLDOWN};
-static sgpio_pin_configuration_t ulpi_dir_pin =
-	{ .sgpio_pin = 11, .scu_group = 1, .scu_pin =  17, .pull_resistors = SCU_NO_PULL};
 
 
 /**
@@ -111,8 +113,6 @@ sgpio_t analyzer  = {
 	.function_count = ARRAY_SIZE(usb_capture_functions),
 };
 
-void rhododendron_isr(void);
-
 
 /**
  * Starts a Rhododendron capture of high-speed USB data.
@@ -123,21 +123,16 @@ int rhododendron_start_capture(void)
 	extern uint8_t sgpio_m0_code, sgpio_m0_code_end;
 
 	extern volatile uint32_t usb_buffer_position;
-	extern volatile uint32_t validation_word;
-
-	uint32_t *m0_code = &m0_vector_table;
 
 	int rc;
 
-
-#ifdef RHODODENDRON_USE_USB1_CLK_AS_ULPI_CLOCK
-	platform_clock_generation_register_block_t *cgu = get_platform_clock_generation_registers();
-	platform_select_base_clock_source(&cgu->periph, CLOCK_SOURCE_DIVIDER_B_OUT);
-#endif
+	// Start from the beginning of our buffers.
+	usb_buffer_position = 0;
+	capture_buffer_read_position = 0;
+	capture_buffer_write_position = 0;
 
 
 	// Set up the SGPIO functions used for capture...
-	usb_buffer_position = 0;
 	rc = sgpio_set_up_functions(&analyzer);
 	if (rc) {
 		return rc;
@@ -146,10 +141,7 @@ int rhododendron_start_capture(void)
 	// Turn on our "capture triggered" LED.
 	rhododendron_turn_on_led(LED_TRIGGERED);
 
-	// Copy in the Rhododendron subprogram.
-	// FIXME: should this use an API to copy into the m0 RAM region?
-	memcpy(&m0_vector_table, &sgpio_m0_code, &sgpio_m0_code_end - &sgpio_m0_code);
-	platform_start_m0_core(&m0_vector_table);
+	// FIXME: verify that the Rhododendron loadable is there?
 
 	// ... and enable USB streaming to the host.
 	usb_streaming_start_streaming_to_host(
@@ -166,12 +158,44 @@ int rhododendron_start_capture(void)
  */
 void rhododendron_stop_capture(void)
 {
-	extern volatile uint32_t validation_word;
-
 	// Disable our stream-to-host, and disable the SGPIO capture.
 	sgpio_halt(&analyzer);
 	usb_streaming_stop_streaming_to_host();
 
 	// Turn off our "capture triggered" LED.
 	rhododendron_turn_off_led(LED_TRIGGERED);
+}
+
+
+static inline void consume_data(size_t amount)
+{
+	capture_buffer_read_position = (usb_buffer_position + amount) % sizeof(large_data_buffer);
+}
+
+static inline void produce_data(void *data, size_t length)
+{
+	uint32_t *usb_buffer = (uint32_t *)usb_bulk_buffer;
+	uint32_t *data_buffer = (uint32_t *)data;
+
+	while(length) {
+		usb_buffer[usb_buffer_position / 4] = *data_buffer;
+		usb_buffer_position = (usb_buffer_position + 4) % sizeof(usb_bulk_buffer);
+
+		data_buffer++;
+		length -= 4;
+	}
+}
+
+
+void service_rhododendron(void)
+{
+	while(capture_buffer_read_position != capture_buffer_write_position) {
+
+		uint32_t packet_type = large_data_buffer[capture_buffer_read_position / 4];
+
+		switch (packet_type) {
+
+		}
+
+	}
 }
