@@ -60,8 +60,6 @@ static sgpio_pin_configuration_t ulpi_stp_pin =
 	{ .sgpio_pin = 9,  .scu_group = 1, .scu_pin =  13, .pull_resistors = SCU_PULLDOWN};
 static sgpio_pin_configuration_t ulpi_nxt_pin =
 	{ .sgpio_pin = 10, .scu_group = 1, .scu_pin =  14, .pull_resistors = SCU_NO_PULL};
-static sgpio_pin_configuration_t ulpi_dir_pin =
-	{ .sgpio_pin = 11, .scu_group = 1, .scu_pin =  17, .pull_resistors = SCU_NO_PULL};
 
 
 

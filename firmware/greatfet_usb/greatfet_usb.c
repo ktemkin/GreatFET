@@ -41,7 +41,7 @@
 
 // Buffer allocated for large data processing.
 // Currently shared. Possibly should be replaced with malloc'd buffers?
-uint32_t large_data_buffer[8192];
+uint32_t large_data_buffer[1024];
 
 
 void emergency_mode(void);
