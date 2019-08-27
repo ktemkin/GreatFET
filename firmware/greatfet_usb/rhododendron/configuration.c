@@ -385,6 +385,13 @@ void rhododendron_turn_off_led(rhododendron_led_t led)
 }
 
 
+void rhododendron_toggle_led(rhododendron_led_t led)
+{
+	// TODO: if the LED wasn't set up properly, skip it
+	gpio_toggle_pin(gpio_leds[led]);
+}
+
+
 
 static int set_up_leds(void)
 {

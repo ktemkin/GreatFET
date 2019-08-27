@@ -17,9 +17,10 @@
 //.equ TARGET_DATA_BUFFER,                   usb_bulk_buffer
 //.equ TARGET_BUFFER_POSITION,               usb_buffer_position
 //.equ TARGET_BUFFER_MASK,                   0x7fff
-.equ TARGET_DATA_BUFFER,                   large_data_buffer
+.equ TARGET_DATA_BUFFER,                   capture_buffer
 .equ TARGET_BUFFER_POSITION,               capture_buffer_write_position
-.equ TARGET_BUFFER_MASK,                   0x7fff
+.equ TARGET_BUFFER_MASK,                   0x3fff
+.equ TARGET_BUFFER_DATA_COUNT,             capture_buffer_data_count;
 
 .global m0_vector_table
 
@@ -53,8 +54,6 @@ m0_reset_handler:
 
 
 .thumb_func
-waiting_for_sgpio:
-
 core_sgpio_processing:
 
 	// Spin until we're ready to handle an SGPIO packet:
@@ -66,7 +65,7 @@ core_sgpio_processing:
 	lsr r0, #1
 
 	// ... and if not, jump back to the beginning.
-	bcc waiting_for_sgpio
+	bcc core_sgpio_processing
 
 	// Clear the interrupt pending bits for the SGPIO slices we're working with.
 	ldr r0, =SGPIO_EXCHANGE_INTERRUPT_CLEAR_REG
@@ -103,11 +102,11 @@ core_sgpio_processing:
 	ldr r1,  [r7, #0]  // 2
 	stm r6!, {r0-r1}
 
-	// Finally, update the buffer location.
+	// Finally, update the buffer location...
 	ldr r0, =TARGET_BUFFER_MASK
 	and r0, r6, r0         // r0 = (position_in_buffer + size_copied) % buffer_size
 
-	// Restore &position_in_buffer, and store the new position there.
+	// ... restore &position_in_buffer, and store the new position there...
 	mov r1, r8
 	str r0, [r1]           // position_in_buffer = (position_in_buffer + size_copied) % buffer_size
 

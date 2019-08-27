@@ -125,6 +125,12 @@ void rhododendron_turn_off_led(rhododendron_led_t led);
 
 
 /**
+ * Toggles the provided Rhododendron LED.
+ */
+void rhododendron_toggle_led(rhododendron_led_t led);
+
+
+/**
  * Starts a Rhododendron capture of high-speed USB data.
  */
 int rhododendron_start_capture(void);
@@ -140,6 +146,21 @@ void rhododendron_stop_capture(void);
  * Rhododenron background "thread".
  */
 void service_rhododendron(void);
+
+
+
+/**
+ * Starts the core Rhododendron packetization engine, which populates the packetization_end_of_packets
+ * array using our State Configurable Timer to detect packet edges.
+ */
+void rhododendron_start_packetization(void);
+
+
+/**
+ * Halts the core Rhododendron packetization engine.
+ */
+void rhododendron_stop_packetization(void);
+
 
 
 #endif
