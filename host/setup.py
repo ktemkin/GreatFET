@@ -66,7 +66,9 @@ setup(
         'pyusb',
         'pygreat',
         'future',
-        'pyfwup'
+        'pyfwup',
+        'cmsis_svd'
+        'tabulate',
     ],
     description='Python library for hardware hacking with the GreatFET',
     long_description=read('README.md'),

@@ -11,7 +11,7 @@ from pygreat.comms import CommandFailureError
 class SPIFlash(DeviceFirmwareManager, GreatFETPeripheral):
     """ Class representing an SPI flash connected to the GreatFET. """
 
-    def __init__(self, board, autodetect=True, allow_fallback=False
+    def __init__(self, board, autodetect=True, allow_fallback=False,
             page_size=256, pages=8192, maximum_address=0x0FFFFF,
             device_id=0, chip_select_port=0x05, chip_select_pin=0x0B):
         """Set up a new SPI flash connection.
