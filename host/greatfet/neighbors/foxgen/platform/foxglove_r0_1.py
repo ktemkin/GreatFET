@@ -16,8 +16,8 @@ def PortAResource(name, number, io_site, oe_site, sf_connection_sites):
 
     return Resource(name, number,
         Subsignal("io", Pins(io_site, dir="io")),
-        Subsignal("oe", Pins(oe_site, dir="o")),
-        Subsignal("connections", Pins(sf_connections, dir="o", assert_width=3), Attrs(PULLMODE="down")),
+        Subsignal("direction", Pins(oe_site, dir="o")),
+        Subsignal("connections", Pins(sf_connection_sites, dir="o", assert_width=3), Attrs(PULLMODE="down")),
         Attrs(IO_TYPE="LVCMOS33")
     )
 
@@ -50,7 +50,7 @@ class FoxglovePlatformR01(LatticeECP5Platform):
             Subsignal("sck",   Pins("B7", dir="i")),
             Subsignal("miso",  Pins("T7", dir="o")),
             Subsignal("mosi",  Pins("T8", dir="i")),
-            Subsignal("cs",   PinsN("R8", dir="i")),
+            Subsignal("cs_n",  Pins("R8", dir="i")),
             Attrs(IO_TYPE="LVCMOS33")
         ),
 
@@ -161,10 +161,6 @@ class FoxglovePlatformR01(LatticeECP5Platform):
 
         # Grab our generated bitstream, and upload it to the FPGA.
         bitstream =  products.get("{}.bit".format(name))
-
-        with open("/tmp/bitstream.out", "wb") as f:
-            f.write(bitstream)
-
         foxglove.configure_fpga(bitstream)
 
 
