@@ -85,7 +85,7 @@ class FoxgloveConfig(Elaboratable):
 
 
 
-    def _get_platform_pins(self, identifier, *args, **kwargs):
+    def _get_platform_pins(self, identifier, direction=None, *args, **kwargs):
         """ Retrieves the platform pins for the given name-string or argument tuple.
 
         Paramters:
@@ -97,12 +97,40 @@ class FoxgloveConfig(Elaboratable):
         """
 
         name_args = self._platform_equivalent_for_name(identifier)
-        return [self._platform.request(*signal_args, *args, **kwargs) for signal_args in name_args]
+        return [self._get_pin_with_direction(signal_args, direction, *args, **kwargs) for signal_args in name_args]
+
+
+
+    def _get_pin_with_direction(self, pin_argument_tuple, direction, *args, attrs=None, **kwargs):
+        """ Requests the provided pin to be configured with a given direction. """
+
+        # Fetch the raw pin, so we can examine it.
+        raw_pin = self._platform.lookup(*pin_argument_tuple)
+
+        # If our pin has a level/shifter and attachments, we'll need to set those up.
+        if self._pin_has_conditioning_attributes(raw_pin):
+
+            # Grab the pin...
+            pin = self._platform.request(*pin_argument_tuple, dir={'io': direction})
+
+            # ... and set up its level shifter's direction.
+            direction_signal = 1 if direction == 'o' else 0
+            self._module.comb += pin.direction.o.eq(direction_signal)
+
+
+            # Return just the pin's I/O signal.
+            return pin.io
+
+        else:
+            return self._platform.request(*pin_argument_tuple, dir=direction)
+
 
 
     def _pin_has_conditioning_attributes(self, resource):
         """ Returns true iff the given pin has Foxglove signal-conditioning attribtues. """
         return hasattr(resource, 'connections')
+
+
 
 
     def route(self, source, destination, attrs=None):
@@ -142,29 +170,6 @@ class FoxgloveConfig(Elaboratable):
 
         # Create our interconnections.
         for in_pin, out_pin in zip(in_pins, out_pins):
-
-            # If the in-pin is on a bank that has a level-shifter, and which can be externally muxed to other signals,
-            # we'll need to perform some set-up first.
-            if self._pin_has_conditioning_attributes(in_pin):
-
-                # Ensure that our level shifter is in input mode.
-                m.d.comb += in_pin.direction.eq(0)
-
-                # ... and replace our general input pin with the FPGA's I/O pin.
-                in_pin = in_pin.io
-
-
-            # Perform similar setup for an out pin.
-            if self._pin_has_conditioning_attributes(out_pin):
-
-                # Ensure that our level shifter is in output mode.
-                m.d.comb += out_pin.direction.eq(1)
-
-                # ... and replace our general output pin with the FPGA's I/O pin.
-                out_pin = out_pin.io
-
-
-            # Finally, make the connection between the input and output pin.
             m.d.comb += out_pin.o.eq(in_pin.i)
 
 

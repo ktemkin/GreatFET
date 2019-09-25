@@ -181,6 +181,27 @@ class Foxglove(GreatFETNeighbor):
             regulator_enable.high()
 
 
+
+    def apply_configuration(self, configuration):
+        """ Applies a FoxgloveConfiguration object to the attached Foxglove.
+
+        This method generates a set of gateware, and then uploads that gatware
+        to the attached Foxglove board. This resets the FPGA, and reconfigures it
+        to provide the connections and interfaces described in the target configuration.
+        """
+
+        try:
+            import nmigen
+        except ImportError:
+            raise EnvironmentError("Cannot import nMigen, so we can't dynamically generate Gateware.")
+
+        # FIXME: read VCC properties and etc. from the relevant bitstream
+
+        # Convert our configuration to a bitstream, and then configure the FPGA with it.
+        bitstream = configuration.to_bitstream()
+        self.configure_fpga(bitstream)
+
+
     def provide_vcca(self, voltage):
         """ Set VCCA to the provided voltage. """
         self._set_rail_voltage('VCCA', voltage)
