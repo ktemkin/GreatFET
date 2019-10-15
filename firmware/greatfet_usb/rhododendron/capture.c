@@ -17,6 +17,7 @@
 #include <drivers/scu.h>
 #include <drivers/timer.h>
 #include <drivers/arm_vectors.h>
+#include <drivers/memory/allocator.h>
 #include <toolchain.h>
 
 #include "../pin_manager.h"
@@ -31,7 +32,7 @@ bool capture_active = false;
 /**
  * Interface to the packetization engine -- defined in packetization.c
  */
-extern volatile uint32_t packetization_end_of_packets[14];
+extern volatile uint32_t packetization_end_of_packets[6];
 extern volatile bool new_delineation_data_available;
 
 
@@ -94,7 +95,7 @@ static sgpio_pin_configuration_t ulpi_data_pins[] = {
  * ULPI control pins (as used here).
  */
 static sgpio_pin_configuration_t ulpi_nxt_pin =
-	{ .sgpio_pin = 10, .scu_group = 1, .scu_pin =  14, .pull_resistors = SCU_PULLDOWN};
+	{ .sgpio_pin = 10, .scu_group = 1, .scu_pin =  14, .pull_resistors = SCU_NO_PULL};
 
 
 static gpio_pin_t ulpi_dir_gpio      = { .port = 0, .pin = 12 };
@@ -174,7 +175,7 @@ const uint8_t rhododendron_direction_isr_priority = 64;
 
 // Buffer allocated for large data processing.
 // Currently shared. Possibly should be replaced with malloc'd buffers?
-uint8_t capture_buffer[16384] ATTR_SECTION(".bss.heap");
+uint8_t capture_buffer[8192] ATTR_SECTION(".bss.heap");
 
 
 
@@ -234,8 +235,12 @@ void rhododendron_stop_capture(void)
 	sgpio_halt(&analyzer);
 	usb_streaming_stop_streaming_to_host();
 
+	rhododendron_stop_packetization();
+
 	// Turn off our "capture triggered" LED.
 	rhododendron_turn_off_led(LED_TRIGGERED);
+
+	pr_info("Position in USB buffer: %08x\n", usb_buffer_position);
 }
 
 
@@ -262,9 +267,7 @@ static void produce_byte(uint8_t byte)
 {
 	// Add the word to the USB buffer, and move our queue ahead by one word.
 	usb_bulk_buffer[usb_buffer_position] = byte;
-	usb_buffer_position = (usb_buffer_position + 1) % sizeof(usb_bulk_buffer);
-
-	++xxx_total_bytes_produced;
+	usb_buffer_position = (usb_buffer_position + 1) % 32768;
 }
 
 
@@ -279,6 +282,9 @@ static void produce_word(uint32_t word)
 		produce_byte(as_bytes[i]);
 	}
 }
+
+
+
 
 
 /**
@@ -366,10 +372,6 @@ static uint32_t capture_buffer_data_count(uint32_t write_position)
 	return virtual_write_pointer - virtual_read_pointer;
 }
 
-//  XXX: debug only
-uint32_t rhododendron_get_byte_counter(void);
-
-
 /**
  * Core processing thread for Rhododendron. Processes USB data that has come in from
  * the M0 coprocessor; and any events that have come from either the M0 or from IRQs.
@@ -384,66 +386,9 @@ void service_rhododendron(void)
 		return;
 	}
 
-	// Always emit any event/delineation packets relevant to us.
-	emit_packet_delineations();
-
-	if (capture_buffer_data_count(write_position)) {
-		rhododendron_toggle_led(LED_STATUS);
-	}
-
 	// While we have data to consume...
 	while (capture_buffer_data_count(write_position)) {
-
-		rhododendron_toggle_led(LED_STATUS);
-		//pr_info("total bytes produced: %d\n", xxx_total_bytes_produced);
-		//pr_info("wpos: %08x rpos: %08x size: %08x captured: %08x\n", write_position,
-		//	capture_buffer_read_position, capture_buffer_data_count(write_position), xxx_total_bytes_produced);
-
-		// ... handle any events that have come in, any USB data pending, and any packet boundaries.
 		emit_usb_data_packet();
 		emit_packet_delineations();
-
-		// DEBUG
-		produce_byte(2);
-		produce_word(rhododendron_get_byte_counter());
 	}
 }
-
-
-/**
- * Adds a USB event to the pending event queue.
-void enqueue_pending_usb_event(rhododendron_packet_id_t packet_id, uint32_t byte_number)
-{
-	volatile rhododendron_usb_event_t *event;
-
-	//  ... the current time, in microseconds...
-	uint32_t time = get_time();
-
-	// ... and our position in the capture buffer.
-	uint32_t position_in_capture_buffer = capture_buffer_write_position;
-
-	// Grab a write slot in our pending event ring.
-	uint32_t write_position = event_ring_write_position;
-	event_ring_write_position = (event_ring_write_position + 1) % ARRAY_SIZE(event_ring);
-
-	// If we're full up on events, remove one to make room for this one.
-	if (events_pending >= ARRAY_SIZE(event_ring)) {
-		--events_pending;
-		event_ring_read_position = (event_ring_read_position + 1) % ARRAY_SIZE(event_ring);
-	}
-
-
-	// Get a quick reference to it.
-	event = &event_ring[write_position];
-
-	// Finally, populate the event...
-	event->event_id = packet_id;
-	event->time = time;
-	event->position_in_data_packet = 31 - sgpio_position;
-	event->position_in_capture_buffer = position_in_capture_buffer;
-
-	// ... and mark it as available for consumption by the other side.
-	++events_pending;
-}
-*/
-
