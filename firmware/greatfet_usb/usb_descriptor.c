@@ -89,13 +89,22 @@ uint8_t usb0_descriptor_configuration_full_speed[] = {
 	USB_WORD(USB_MAX_PACKET_BULK_FS),	// wMaxPacketSize
 	0x00,							// bInterval: no NAK
 
+	// Second bulk endpoint for e.g. Rhododendron packetization data.
+	7,							// bLength
+	USB_DESCRIPTOR_TYPE_ENDPOINT,		// bDescriptorType
+	0x83,	             			// bEndpointAddress
+	0x02,							// bmAttributes: BULK
+	USB_WORD(USB_MAX_PACKET_BULK_FS),	// wMaxPacketSize
+	0x00,							// bInterval: no NAK
+
 	0,									// TERMINATOR
 };
 
 uint8_t usb0_descriptor_configuration_high_speed[] = {
 	9,							// bLength
 	USB_DESCRIPTOR_TYPE_CONFIGURATION,	// bDescriptorType
-	USB_WORD(32),						// wTotalLength
+	//USB_WORD(32),						// wTotalLength
+	USB_WORD(39),						// wTotalLength
 	0x01,							// bNumInterfaces
 	0x01,							// bConfigurationValue
 	0x00,							// iConfiguration
@@ -106,7 +115,7 @@ uint8_t usb0_descriptor_configuration_high_speed[] = {
 	USB_DESCRIPTOR_TYPE_INTERFACE,		// bDescriptorType
 	0x00,							// bInterfaceNumber
 	0x00,							// bAlternateSetting
-	0x02,							// bNumEndpoints
+	0x03,							// bNumEndpoints
 	0xFF,							// bInterfaceClass: vendor-specific
 	0xFF,							// bInterfaceSubClass
 	0xFF,							// bInterfaceProtocol: vendor-specific
@@ -122,6 +131,14 @@ uint8_t usb0_descriptor_configuration_high_speed[] = {
 	7,								// bLength
 	USB_DESCRIPTOR_TYPE_ENDPOINT,		// bDescriptorType
 	USB_BULK_OUT_EP_ADDR,			// bEndpointAddress
+	0x02,							// bmAttributes: BULK
+	USB_WORD(USB_MAX_PACKET_BULK_HS),	// wMaxPacketSize
+	0x00,							// bInterval: no NAK
+
+	// Second bulk endpoint for e.g. Rhododendron packetization data.
+	7,							// bLength
+	USB_DESCRIPTOR_TYPE_ENDPOINT,		// bDescriptorType
+	0x83,	             			// bEndpointAddress
 	0x02,							// bmAttributes: BULK
 	USB_WORD(USB_MAX_PACKET_BULK_HS),	// wMaxPacketSize
 	0x00,							// bInterval: no NAK
@@ -221,7 +238,7 @@ uint8_t usb1_descriptor_device_qualifier[] = {
 uint8_t usb1_descriptor_configuration_full_speed[] = {
 	9,					// bLength
 	USB_DESCRIPTOR_TYPE_CONFIGURATION,	// bDescriptorType
-	USB_WORD(32),				// wTotalLength
+	USB_WORD(39),				// wTotalLength
 	0x01,					// bNumInterfaces
 	0x01,					// bConfigurationValue
 	0x00,					// iConfiguration
@@ -232,7 +249,7 @@ uint8_t usb1_descriptor_configuration_full_speed[] = {
 	USB_DESCRIPTOR_TYPE_INTERFACE,		// bDescriptorType
 	0x00,							// bInterfaceNumber
 	0x00,							// bAlternateSetting
-	0x02,							// bNumEndpoints
+	0x03,							// bNumEndpoints
 	0xFF,							// bInterfaceClass: vendor-specific
 	0xFF,							// bInterfaceSubClass
 	0xFF,							// bInterfaceProtocol: vendor-specific

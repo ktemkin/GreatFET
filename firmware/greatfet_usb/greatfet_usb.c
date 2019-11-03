@@ -51,11 +51,13 @@ void init_usb0(void) {
 	usb_queue_init(&usb0_endpoint_control_in_queue);
 	usb_queue_init(&usb0_endpoint_bulk_out_queue);
 	usb_queue_init(&usb0_endpoint_bulk_in_queue);
+	usb_queue_init(&usb0_endpoint_delineation_queue);
 
 	usb_endpoint_init(&usb0_endpoint_control_out);
 	usb_endpoint_init(&usb0_endpoint_control_in);
 
 	usb_endpoint_init(&usb0_endpoint_bulk_in);
+	usb_endpoint_init(&usb0_endpoint_delineation);
 
 	nvic_set_priority(NVIC_USB0_IRQ, 254);
 	nvic_set_priority(NVIC_SGPIO_IRQ, 0);
@@ -65,8 +67,6 @@ void init_usb0(void) {
 
 // XXX:
 void service_usb_analysis(void);
-
-// XXX
 int rhododendron_early_init(void);
 
 
@@ -102,7 +102,6 @@ int main(void) {
 		service_usb_streaming();
 		service_glitchkit();
 		service_usb_analysis();
-		service_rhododendron();
 	}
 
 	return 0;

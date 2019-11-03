@@ -18,7 +18,6 @@ enum {
 
 	// FIXME: halve this when doing both in and out
 	USB_STREAMING_BUFFER_SIZE    = 0x4000,
-	USB_STREAMING_MIN_TRANSFER_SIZE = 32,
 
 	USB_STREAMING_IN_ADDRESS  = 0x81,
 	USB_STREAMING_OUT_ADDRESS = 0x02,

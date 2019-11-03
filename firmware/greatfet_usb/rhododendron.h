@@ -18,8 +18,7 @@
 // If you have a v0.2 Rhododendron (or earlier) and haven't made the bodges I have
 // (looking at you, @tannewt), you'll probably want to undefine these -- I've bodged in
 // some automated test connections, and will probably add them to the design in r0.3. ~KT
-//#define RHODODENDRON_SUPPORTS_VOLTAGE_SANITY_CHECKING
-//#define RHODODENDRON_SUPPORTS_CLOCK_SANITY_CHECKING
+#define RHODODENDRON_SUPPORTS_VOLTAGE_SANITY_CHECKING
 
 // If this Rhododendron has the its ULPI CLKOUT tied to 3v3, we can provide it with a 60MHz
 // reference clock of our own. Undefine the line below to switch the clock frequency to

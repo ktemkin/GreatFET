@@ -99,23 +99,10 @@ static sgpio_function_t ulpi_register_functions[] = {
 		.pin_configurations           = ulpi_data_pins,
 		.bus_width                    = ARRAY_SIZE(ulpi_data_pins),
 
-
-#ifdef RHODODENDRON_USE_USB1_CLK_AS_ULPI_CLOCK
-
 		// We'll shift in time with rising edges of the PHY clock.
 		.shift_clock_source          = SGPIO_CLOCK_SOURCE_COUNTER,
 		.shift_clock_edge            = SGPIO_CLOCK_EDGE_RISING,
 		.shift_clock_frequency       = 0, // Never divide; just use the SGPIO clock frequency.
-
-
-#else
-
-		// We'll shift in time with rising edges of the PHY clock.
-		.shift_clock_source          = SGPIO_CLOCK_SOURCE_SGPIO08,
-		.shift_clock_edge            = SGPIO_CLOCK_EDGE_FALLING,
-		.shift_clock_input           = &ulpi_clk_pin,
-
-#endif
 
 
 		// Always shift. Ideally, this data would be qualified on the NXT
@@ -262,7 +249,7 @@ static void set_up_onboard_adc(bool use_adc1, uint32_t pin_mask, uint8_t signifi
 
 
 /**
- * Diagnostic functionality for reading the voltage of VDD18 on Rhododendrons with it brought to ADC0_0.
+ * Diagnostic functionality for reading the voltage of VDD18 on Rhododendrons with it brought to ADC0_5.
  *
 
  */
@@ -272,15 +259,15 @@ static uint32_t read_vdd18_voltage(void)
 
 	uint16_t sample;
 
-	// Read from ADC 0_0.
-	set_up_onboard_adc(0, 1 << 0, 10);
+	// Read from ADC 0_5.
+	set_up_onboard_adc(0, 1 << 5, 10);
 
 	// Start a conversion, and then wait for it to complete.
 	ADC0_CR |= ADC_CR_START(1);
-	while(!(ADC0_DR0 & ADC_DR_DONE));
+	while(!(ADC0_DR5 & ADC_DR_DONE));
 
 	// Read the ADC value, and send it
-	sample = (ADC0_DR0 >> 6) & 0x3ff;
+	sample = (ADC0_DR5 >> 6) & 0x3ff;
 
 	return (sample * vcc_mv) / 1024;
 }
@@ -290,19 +277,9 @@ static uint32_t read_vdd18_voltage(void)
 
 static int sanity_check_environment(void)
 {
+	// For now, don't warn on VDD issues, as r0.2 don't have the ADC populated.
+	const bool vdd_issue_is_error = false;
 
-#ifdef RHODODENDRON_SUPPORTS_CLOCK_SANITY_CHECKING
-
-	// Synthetic maximum allowable frequency numbers;
-	// which account mostly for our measurement inaccuracy.
-	const uint32_t max_clock_frequency = 66000000UL;
-	const uint32_t min_clock_frequency = 54000000UL;
-
-#endif
-
-
-
-#ifdef RHODODENDRON_SUPPORTS_VOLTAGE_SANITY_CHECKING
 	uint32_t time_base = get_time();
 	uint32_t timeout = 300 * 1000;
 
@@ -332,40 +309,14 @@ static int sanity_check_environment(void)
 
 	if (vdd18_voltage_mv < vdd18_voltage_min) {
 		pr_warning("rhododendron: warning: PHY VDD18 voltage too low! (expected >= 1.6V)\n");
-		return ENODEV;
+		return vdd_issue_is_error ? ENODEV : 0;
 	}
 	if (vdd18_voltage_mv > vdd18_voltage_max) {
-		pr_warning("rhododendron: warning: PHY VDD18 voltage too high! (expected <= 2.0V\n");
-		return ENODEV;
+		pr_warning("rhododendron: warning: PHY VDD18 voltage too high! (expected <= 2.0V)\n");
+		return vdd_issue_is_error ? ENODEV : 0;
 	}
 
 	pr_info("rhododendron: voltage supplies OK!\n");
-#endif
-
-#ifdef RHODODENDRON_SUPPORTS_CLOCK_SANITY_CHECKING
-
-	//
-	// Next, check the core clock.
-	//
-
-	// FIXME: abstract
-	platform_scu_configure_pin_fast_io(4, 7, 1, SCU_NO_PULL);
-
-	uint32_t freq = platform_detect_clock_source_frequency(CLOCK_SOURCE_GP_CLOCK_INPUT);
-	pr_info("rhododendron: measured PHY clock frequency at %d Hz\n", freq);
-
-	if (freq < min_clock_frequency) {
-		pr_warning("rhododendron: warning: PHY clock frequency too low! (expected ~60MHz)\n");
-		return ENODEV;
-	}
-
-	if (freq > max_clock_frequency) {
-		pr_warning("rhododendron: warning: PHY clock frequency voltage too high! (expected ~60MHz)\n");
-		return ENODEV;
-	}
-
-#endif
-
 	return 0;
 }
 
@@ -530,7 +481,6 @@ int set_up_clock_output(void)
 	// Enable the generic CLKOUT output.
 	platform_enable_base_clock(&cgu->out);
 
-#ifdef RHODODENDRON_USE_USB1_CLK_AS_ULPI_CLOCK
 	pr_info("Providing ULPI clock directly!\n");
 
 	// If we're generating the ULPI clock directly, use DIVB as the source.
@@ -547,8 +497,6 @@ int set_up_clock_output(void)
 	gpio_set_pin_direction(ulpi_clk_gpio, true);
 
 	// Otherwise, we'll default to the audio PLL, which can generate a 26MHz reference clock.
-#endif
-
 
 	// Configure the CLK2 pin to be a high-speed output.
 	platform_scu_pin_configuration_t clk2_config = {

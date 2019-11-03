@@ -12,6 +12,11 @@
 #include <drivers/platform_clock.h>
 #include <drivers/platform_config.h>
 
+#include <drivers/usb/usb.h>
+#include <drivers/usb/usb_queue.h>
+
+#include "../usb_endpoint.h"
+
 // Get a reference to our SCT registers.
 static volatile platform_sct_register_block_t *reg = (void *)0x40000000;
 
@@ -31,9 +36,15 @@ typedef enum {
  *  - Produced by our packetization interrupt.
  *  - Consumed by the main capture code.
  */
-volatile uint32_t packetization_end_of_packets[6];
-volatile bool new_delineation_data_available = false;
+static const uint32_t boundaries_per_packet = 6;
 static const uint8_t maximum_event = 10;
+
+
+/**
+ * Buffer that stores delineation data as we wait for the host to grab it.
+ */
+volatile uint32_t delineation_data[768];
+volatile uint32_t position_in_delineation_buffer;
 
 
 // Forward declarations.
@@ -103,8 +114,6 @@ static void set_up_bit_counter(void)
 	// We'll count bytes, and this is a parallel bus, so we'll just set the prescaler to '0'.
 	reg->control_low.count_prescaler = 0;
 }
-
-
 
 
 
@@ -245,18 +254,37 @@ static void set_up_packetization(void)
  */
 static void packetization_isr(void)
 {
+	volatile uint32_t *delineation_buffer = &delineation_data[position_in_delineation_buffer];
+	const uint32_t half_buffer_size = ARRAY_SIZE(delineation_data) / 2;
+
 	// Mark the interrupt as serviced by clearing the "event occurred" flag for our final capture event (event 12)...
 	reg->event_occurred = (1 << maximum_event);
 
 	// ... buffer all of the packet capture data...
-	for (unsigned i = 0; i < ARRAY_SIZE(packetization_end_of_packets); ++i) {
-		packetization_end_of_packets[i] = reg->capture[i].all;
+	for (unsigned i = 0; i < boundaries_per_packet; ++i) {
+		delineation_buffer[i] = reg->capture[i].all;
 	}
 
-	// ... and indicate to our main capture code that delineation data is ready.
-	new_delineation_data_available = true;
-}
+	// ... move our position in the buffer forward...
+	position_in_delineation_buffer =
+			(position_in_delineation_buffer + boundaries_per_packet) % ARRAY_SIZE(delineation_data);
 
+
+	// If we've just crossed a half-buffer boundary, send our packetization data to the host.
+	if ((position_in_delineation_buffer % half_buffer_size) == 0) {
+
+		// Always send the half we've just completed, which is located in the half of the buffer
+		// opposite our normal position.
+		uint32_t position_to_send =
+			(position_in_delineation_buffer + half_buffer_size) % ARRAY_SIZE(delineation_data);
+
+		usb_transfer_schedule(
+			&usb0_endpoint_delineation,
+			(void *)&delineation_data[position_to_send],
+			half_buffer_size, 0, 0);
+	}
+
+}
 
 /**
  * Starts or stops SCT operation.
@@ -282,6 +310,9 @@ static void set_counter_running(bool running)
  */
 void rhododendron_start_packetization(void)
 {
+	// Set up the USB endpoint we use to transmit sideband data.
+	usb_endpoint_init(&usb0_endpoint_delineation);
+
 	// Set up our core packetization engine.
 	set_up_packetization();
 
@@ -294,6 +325,9 @@ void rhododendron_start_packetization(void)
 	// Start off in an initial state of 0.
 	reg->state = 0;
 
+	// Start off at the first position in our delneation buffer.
+	position_in_delineation_buffer = 0;
+
 	// Finally, enable events to start the counter, and start with the counter paused.
 	set_counter_running(true);
 }
@@ -304,10 +338,16 @@ void rhododendron_start_packetization(void)
  */
 void rhododendron_stop_packetization(void)
 {
+	usb_endpoint_disable(&usb0_endpoint_delineation);
+
 	platform_disable_interrupt(SCT_IRQ);
 	set_counter_running(false);
 
 	pr_info("Packetization terminated with count %u in state %u.\n", reg->count, reg->state);
+
+	for (unsigned i=0; i < ARRAY_SIZE(delineation_data); ++i) {
+		pr_info("delineator[%u] = %u\n", i, delineation_data[i]);
+	}
 }
 
 

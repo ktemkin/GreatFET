@@ -24,7 +24,7 @@ from greatfet import GreatFET, find_greatfet_asset
 from greatfet.utils import GreatFETArgumentParser, log_silent, log_error
 
 # Default sample-delivery timeout.
-SAMPLE_DELIVERY_TIMEOUT_MS   = 3000
+SAMPLE_DELIVERY_TIMEOUT_MS  = 100
 
 # Speed constants.
 SPEED_HIGH = 0
@@ -46,6 +46,7 @@ class USBDelineator:
         # Create holding buffers for our "packet boundary" data and for our
         # data pending packetization.
         self.pending_data = []
+        self.pending_boundary_data = bytearray()
         self.packet_boundaries = []
 
         # Store a count of bytes already parsed.
@@ -55,7 +56,6 @@ class USBDelineator:
     def add_boundary(self, byte_number):
         """ Adds a given boundary to our list of USB boundaries. """
 
-        # Ensure we only have a
         # FIXME: handle rollover for extra-long captures
         if byte_number < self.bytes_parsed:
             return
@@ -69,6 +69,21 @@ class USBDelineator:
 
         # ... and check to see if it helps us chunk any data.
         self.handle_new_data()
+
+    def add_boundary_bytes(self, data):
+        """ Processes a set of raw bytes that indicate USB packet boundaries. """
+
+        # Add in our new data...
+        self.pending_boundary_data.extend(data)
+
+        # ... and extract any boundaries we can from it.
+        while len(self.pending_boundary_data) >= 4:
+            next_boundary_raw = self.pending_boundary_data[0:4]
+            del self.pending_boundary_data[0:4]
+
+            next_boundary = int.from_bytes(next_boundary_raw, byteorder='little')
+            self.add_boundary(next_boundary)
+
 
 
     def submit_data(self, data):
@@ -278,8 +293,6 @@ def main():
 
     # Create a new delineator to chunk the received data into packets.
     delineator     = USBDelineator()
-    packet_handler = RhododenronPacketParser(delineator)
-
 
     # Set up our argument parser.
     parser = GreatFETArgumentParser(description="Simple Rhododendron capture utility for GreatFET.", verbose_by_default=True)
@@ -345,10 +358,23 @@ def main():
     device.apis.usb_analyzer.start_capture()
     transfer_buffer = array.array('B', b"\0" * buffer_size)
 
+    # FIXME: abstract
+    delineation_buffer = array.array('B', b"\0" * 512)
+
     total_captured = 0
 
     try:
+        log_function("Captured 0 bytes.", end="\r")
+
         while True:
+
+            try:
+                new_delineation_bytes = device.comms.device.read(0x83, delineation_buffer, SAMPLE_DELIVERY_TIMEOUT_MS)
+                delineator.add_boundary_bytes(delineation_buffer[0:new_delineation_bytes])
+
+            except usb.core.USBError as e:
+                if e.errno != errno.ETIMEDOUT:
+                    raise
 
             # Capture data from the device, and unpack it.
             try:
@@ -358,7 +384,7 @@ def main():
                 total_captured += new_samples
                 log_function("Captured {} bytes.".format(total_captured), end="\r")
 
-                packet_handler.submit_data(samples)
+                delineator.submit_data(samples)
 
 
             except usb.core.USBError as e:

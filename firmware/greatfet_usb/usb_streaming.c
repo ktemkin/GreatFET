@@ -25,8 +25,8 @@
 static bool usb_streaming_enabled = false;
 static unsigned int phase = 1;
 
-static uint32_t *volatile position_in_buffer;
-static uint32_t *volatile data_in_buffer;
+static volatile uint32_t *volatile position_in_buffer;
+static volatile uint32_t *volatile data_in_buffer;
 volatile uint32_t debug_data;
 
 uint32_t read_position;
@@ -97,6 +97,7 @@ static void service_usb_streaming_in(void)
 		phase = 0;
 
 		++transfers;
+		led_on(LED4);
 	}
 
 	if ((*position_in_buffer < USB_STREAMING_BUFFER_SIZE) && phase == 0) {
@@ -107,12 +108,9 @@ static void service_usb_streaming_in(void)
 		phase = 1;
 
 		++transfers;
+		led_off(LED4);
 	}
 
-	// Toggle the LED a bit to indicate progress.
-	if ((transfers % 100) == 0) {
-		led_toggle(LED4);
-	}
 }
 
 

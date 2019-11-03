@@ -53,6 +53,19 @@ usb_endpoint_t usb0_endpoint_bulk_out = {
 };
 static USB_DEFINE_QUEUE(usb0_endpoint_bulk_out, 1);
 
+
+// FIXME: rename to not be rhododendron specific :)
+usb_endpoint_t usb0_endpoint_delineation = {
+	.address = 0x83,
+	.device = &usb_peripherals[0],
+	.in = &usb0_endpoint_delineation,
+	.out = 0,
+	.setup_complete = 0,
+	.transfer_complete = usb_queue_transfer_complete
+};
+static USB_DEFINE_QUEUE(usb0_endpoint_delineation, 1);
+
+
 /* USB1 */
 usb_endpoint_t usb1_endpoint_control_out = {
 	.address = 0x00,

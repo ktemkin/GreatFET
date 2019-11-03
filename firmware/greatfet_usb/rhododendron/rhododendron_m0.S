@@ -14,13 +14,9 @@
 
 
 // Buffer that we're funneling data to.
-//.equ TARGET_DATA_BUFFER,                   usb_bulk_buffer
-//.equ TARGET_BUFFER_POSITION,               usb_buffer_position
-//.equ TARGET_BUFFER_MASK,                   0x7fff
-.equ TARGET_DATA_BUFFER,                   capture_buffer
-.equ TARGET_BUFFER_POSITION,               capture_buffer_write_position
-.equ TARGET_BUFFER_MASK,                   0x1fff
-.equ TARGET_BUFFER_DATA_COUNT,             capture_buffer_data_count;
+.equ TARGET_DATA_BUFFER,                   usb_bulk_buffer
+.equ TARGET_BUFFER_POSITION,               usb_buffer_position
+.equ TARGET_BUFFER_MASK,                   0x7fff
 
 .global m0_vector_table
 
