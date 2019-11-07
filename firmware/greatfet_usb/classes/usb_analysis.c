@@ -32,6 +32,10 @@ static bool capture_triggered = false;
 static gpio_pin_t ulpi_stp_gpio  = { .port = 1, .pin = 6  };
 
 
+
+static gpio_pin_t vbus_detected_led  = { .port = 1, .pin = 15  };
+
+
 void service_usb_analysis(void)
 {
 	if (capture_triggered && !capture_running) {
@@ -43,6 +47,8 @@ void service_usb_analysis(void)
 		capture_running = false;
 	}
 
+	// Keep our VBUS detected LED up to date.
+	rhododendron_set_led_state(LED_VBUS, rhododendron_vbus_detected());
 }
 
 

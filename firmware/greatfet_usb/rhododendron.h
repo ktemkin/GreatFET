@@ -130,6 +130,18 @@ void rhododendron_toggle_led(rhododendron_led_t led);
 
 
 /**
+ * Sets the state of the provided Rhododendron LED.
+ */
+void rhododendron_set_led_state(rhododendron_led_t led, bool on);
+
+
+/**
+ * Returns true iff our Rhododendron board detects a connected VBUS supply on its target port.
+ */
+bool rhododendron_vbus_detected(void);
+
+
+/**
  * Starts a Rhododendron capture of high-speed USB data.
  */
 int rhododendron_start_capture(void);

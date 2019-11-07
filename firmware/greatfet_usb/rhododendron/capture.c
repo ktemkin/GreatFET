@@ -117,7 +117,7 @@ int rhododendron_start_capture(void)
 	}
 
 	// ... set up the packetization driver ...
-	rhododendron_start_packetization();
+	//rhododendron_start_packetization();
 
 	// ... turn on our "capture triggered" LED...
 	rhododendron_turn_on_led(LED_TRIGGERED);
@@ -142,7 +142,7 @@ void rhododendron_stop_capture(void)
 {
 	capture_active = false;
 
-	rhododendron_stop_packetization();
+	//rhododendron_stop_packetization();
 
 	// Disable our stream-to-host, direction monitor, and SGPIO capture.
 	sgpio_halt(&analyzer);

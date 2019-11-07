@@ -31,6 +31,9 @@ static gpio_pin_t gpio_leds[] = {
 };
 
 
+static gpio_pin_t vbus_gpio = { .port = 1, .pin = 15 };
+
+
 
 // Small buffers used for ULPI register exchanges.
 static uint8_t  register_access_buffer[8];
@@ -54,8 +57,6 @@ static sgpio_pin_configuration_t ulpi_data_pins[] = {
 };
 
 
-static sgpio_pin_configuration_t ulpi_clk_pin =
-	{ .sgpio_pin = 8,  .scu_group = 9, .scu_pin =  6,  .pull_resistors = SCU_NO_PULL};
 static sgpio_pin_configuration_t ulpi_stp_pin =
 	{ .sgpio_pin = 9,  .scu_group = 1, .scu_pin =  13, .pull_resistors = SCU_PULLDOWN};
 static sgpio_pin_configuration_t ulpi_nxt_pin =
@@ -63,12 +64,6 @@ static sgpio_pin_configuration_t ulpi_nxt_pin =
 
 
 
-/*
-// XXX: Temporary test of external reference-clock behavior.
-static const sgpio_clock_source_t ulpi_clock_source = SGPIO_CLOCK_SOURCE_SGPIO11;
-static sgpio_pin_configuration_t ulpi_clk_pin =
-	{ .sgpio_pin = 11,  .scu_group = 1, .scu_pin = 4,  .pull_resistors = SCU_NO_PULL};
-*/
 
 // SGPIO pin definitions...
 
@@ -321,6 +316,12 @@ static int sanity_check_environment(void)
 }
 
 
+bool rhododendron_vbus_detected(void)
+{
+	return gpio_get_pin_value(vbus_gpio);
+}
+
+
 
 void rhododendron_turn_on_led(rhododendron_led_t led)
 {
@@ -340,6 +341,13 @@ void rhododendron_toggle_led(rhododendron_led_t led)
 {
 	// TODO: if the LED wasn't set up properly, skip it
 	gpio_toggle_pin(gpio_leds[led]);
+}
+
+
+void rhododendron_set_led_state(rhododendron_led_t led, bool on)
+{
+	// TODO: if the LED wasn't set up properly, skip it
+	gpio_set_pin_value(gpio_leds[led], !on);
 }
 
 
@@ -530,6 +538,9 @@ int rhododendron_early_init(void)
 		return rc;
 	}
 
+	// Set up our VBUS detect led.
+	gpio_configure_pinmux(vbus_gpio);
+	gpio_set_pin_direction(vbus_gpio, false);
 
 	return 0;
 }

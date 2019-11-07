@@ -13,6 +13,8 @@ import array
 import tempfile
 import threading
 
+import crcmod
+
 # Temporary?
 import usb
 
@@ -41,7 +43,19 @@ SPEED_NAMES = {
 class USBDelineator:
     """ Class that breaks a USB data stream into its component parts. """
 
+    # Polynomial used for the USB CRC16.
+    USB_CRC_POLYNOMIAL = 0x18005
+
+    inner_data_crc = staticmethod(crcmod.mkCrcFun(USB_CRC_POLYNOMIAL))
+
+    @classmethod
+    def data_crc(cls, data):
+        return cls.inner_data_crc(data) ^ 0xFFFF
+
+
     def __init__(self):
+
+        self.found_first_token = False
 
         # Create holding buffers for our "packet boundary" data and for our
         # data pending packetization.
@@ -51,6 +65,8 @@ class USBDelineator:
 
         # Store a count of bytes already parsed.
         self.bytes_parsed = 0
+
+
 
 
     def add_boundary(self, byte_number):
@@ -68,7 +84,8 @@ class USBDelineator:
         self.packet_boundaries.append(byte_number)
 
         # ... and check to see if it helps us chunk any data.
-        self.handle_new_data()
+        #self.handle_new_data()
+
 
     def add_boundary_bytes(self, data):
         """ Processes a set of raw bytes that indicate USB packet boundaries. """
@@ -96,11 +113,78 @@ class USBDelineator:
         self.handle_new_data()
 
 
+    def divine_next_boundary(self):
+
+        TOKEN_LENGTH         = 3
+        HANDSHAKE_LENGTH     = 1
+
+        TOKEN_PID_SUFFIX     = 0b01
+        HANDSHAKE_PID_SUFFIX = 0b10
+        DATA_PID_SUFFIX      = 0b11
+
+        data = self.pending_data[:]
+        relative_offset = 0
+
+        # If our byte seems likely to be a "bus turnover" byte,
+        # consider the next byte, instead.
+        if not (data[0] & 0xF0):
+            if len(self.pending_data) > 1:
+                del data[0]
+                relative_offset = 1
+
+        # Extract the last two bits of the PID, which tell us what category
+        # of packet this is.
+        pid_suffix = data[0] & 0b11
+
+        if pid_suffix == TOKEN_PID_SUFFIX:
+            return TOKEN_LENGTH + relative_offset
+
+        elif pid_suffix == HANDSHAKE_PID_SUFFIX:
+            return HANDSHAKE_LENGTH + relative_offset
+
+        elif (pid_suffix == DATA_PID_SUFFIX) & (len(self.pending_data) >= 3):
+
+            for i in range(3, 512):
+
+                if i > len(self.pending_data):
+                    break
+
+                payload = bytes(data[1: i-2])
+                payload_crc = self.data_crc(payload)
+
+                packet_crc = data[i-2] | data[i-1] << 8
+
+                print("Trying payload: {}{}; check = {}, looking for {}".format(len(payload) + 3, payload, payload_crc, packet_crc))
+
+                if payload_crc == packet_crc:
+                    print("FOUND!")
+                    return len(data) + relative_offset
+
+
+        next_packet_boundary = min(self.packet_boundaries)
+        return next_packet_boundary - self.bytes_parsed
+
+
+    def trim_to_first_token(self):
+
+        while self.pending_data:
+            byte = self.pending_data[0]
+
+            if (byte & 0xf0) and ((byte & 0x11) == 0b01):
+                self.found_first_token = True
+                return
+
+            del self.pending_data[0]
+
+
     def handle_new_data(self):
         """
         Checks to see if any new {data, packet boundary} information helps us generate packets, and
         generates packets if we can.
         """
+
+        if not self.found_first_token:
+            self.trim_to_first_token()
 
         # Repeatedly try to extract a packet until we no longer can.
         while True:
@@ -110,8 +194,7 @@ class USBDelineator:
                 return
 
             # FIXME: packet delineations _should_ be monotonic, so this should just be [0]?
-            next_packet_boundary = min(self.packet_boundaries)
-            next_boundary_relative = next_packet_boundary - self.bytes_parsed
+            next_boundary_relative = self.divine_next_boundary()
 
             # If our next boundary occurs after our pending data, we can't do anything yet. Abort.
             if next_boundary_relative >= len(self.pending_data):
@@ -129,8 +212,8 @@ class USBDelineator:
             del self.pending_data[0:new_packet_length]
             self.bytes_parsed += new_packet_length
 
-            # Remove the active packet boundary, as we've already consumed all data up to it.
-            self.packet_boundaries.remove(next_packet_boundary)
+            # Remove any packet boundaries that we've already parsed.
+            self.packet_boundaries = [b for b in self.packet_boundaries if b > self.bytes_parsed]
 
             # Finally, emit the new packet.
             self.emit_packet(new_packet)
@@ -171,107 +254,169 @@ class USBDelineator:
         }
 
         pid = data[0] & 0x0f
+
+        # Skip SOFs.
+        if pid == 0b0101:
+            return
+
         if pid in PIDS:
             print("{} PACKET: {}".format(PIDS[pid], ["{:02x}".format(byte) for byte in data]))
         else:
             print("UNKNOWN PACKET: {}".format(["{:02x}".format(byte) for byte in data]))
 
 
-class RhododenronPacketParser:
-    """ Parses a rhododendron data-stream, and chunks it into Rhododendron packets. """
+class USBHackDelineator:
+    """ Class that breaks a USB data stream into its component parts. """
 
-    # Rhododendron packet types.
-    PACKET_TYPE_USB_DATA     = 0
-    PACKET_TYPE_DELINEATION  = 1
+    # Polynomial used for the USB CRC16.
+    USB_CRC_POLYNOMIAL = 0x18005
 
-    PACKET_PAYLOAD_SIZES = {
-        PACKET_TYPE_USB_DATA:    32,
-        PACKET_TYPE_DELINEATION: 12,
-    }
+    inner_data_crc = staticmethod(crcmod.mkCrcFun(USB_CRC_POLYNOMIAL))
+
+    @classmethod
+    def data_crc(cls, data):
+        return cls.inner_data_crc(data) ^ 0xFFFF
 
 
-    def __init__(self, delineator):
-        """ Creates a new Rhododendron Packet Parser (TM).
+    def __init__(self):
 
-        Parameters:
-            delineator -- A USBDelinator object that will accept data extracted from Rhododendron packets,
-                          and break it into USB packets.
-        """
+        self.found_first_token = False
 
-        self.delineator = delineator
+        # Create holding buffers for our "packet boundary" data and for our
+        # data pending packetization.
+        self.pending_data = []
 
-        # Start off assuming we're not currently parsing any data.
-        self.current_packet_type   = None
-        self.current_packet_data   = []
-        self.current_packet_length = None
-
-        # Statistics.
-        self.bytes_processed = 0
+        # Store a count of bytes already parsed.
+        self.bytes_parsed = 0
 
 
     def submit_data(self, data):
-        """ Handles new Rhododendron packet data. """
+        """ Processes a set of USB data for delineation. """
 
-        # Parse the data we have until there's no data left.
-        while data:
+        # Add our new data to our list of pending data...
+        self.pending_data.extend(data)
 
-            # If we don't currently have a packet, use the first byte of the data to start a new one.
-            if self.current_packet_type is None:
-                self.start_new_packet(data[0])
-                del data[0]
-
-            # Determine how much more data we're looking for in the given Rhododendron packet.
-            data_remaining = self.current_packet_length - len(self.current_packet_data)
-
-            # Extract up to the remaining packet length from our incoming data stream...
-            new_data = data[0:data_remaining]
-            del data[0:data_remaining]
-
-            # ... and add it to our packet-in-progress.
-            self.current_packet_data.extend(new_data)
-
-            # If we've just finished a packet, handle it!
-            if len(self.current_packet_data) == self.current_packet_length:
-                self.handle_packet(self.current_packet_type, self.current_packet_data)
-                self.current_packet_type = None
-                self.current_packet_data = []
+        # ... and check to see if we can break it into packets.
+        self.divine_boundaries()
 
 
-    def start_new_packet(self, packet_id):
-        """ Configures the parser to accept a new packet, based on its first-byte ID. """
+    @staticmethod
+    def is_valid_pid(byte):
 
-        # If we don't know the size of the given packet type, fail out.
-        if packet_id not in self.PACKET_PAYLOAD_SIZES:
-            raise ValueError("unknown packet type {}; failing out after {} bytes!".format(packet_id, self.bytes_processed))
+        pid_low = byte & 0x0f
+        pid_high = byte >> 4
+        pid_high_inverse = pid_high ^ 0xf
 
-        # Store the current packet's type and size.
-        self.current_packet_type = packet_id
-        self.current_packet_length = self.PACKET_PAYLOAD_SIZES[packet_id]
-
-        self.bytes_processed += 1
+        return pid_low == pid_high_inverse
 
 
-    def handle_packet(self, packet_type, packet_data):
-        """ Handles a complete Rhododendron packet. """
+    def divine_boundaries(self):
 
-        self.bytes_processed += len(packet_data)
+        TOKEN_LENGTH         = 3
+        HANDSHAKE_LENGTH     = 1
 
-        # If this is an "end event" packet, grab the point at which
-        # we're supposed to emit the packet.
-        if packet_type == self.PACKET_TYPE_DELINEATION:
-            while packet_data:
-
-                # Grab a single termination point from the array...
-                termination = int.from_bytes(packet_data[0:1], byteorder='little')
-                del packet_data[0:2]
-
-                # ... and consider it a new USB packet boundary.
-                self.delineator.add_boundary(termination)
+        TOKEN_PID_SUFFIX     = 0b01
+        HANDSHAKE_PID_SUFFIX = 0b10
+        DATA_PID_SUFFIX      = 0b11
+        SPECIAL_PID_SUFFIX   = 0b00
 
 
-        # If this is a USB data packet, submit it directly to the delineator.
-        elif packet_type == self.PACKET_TYPE_USB_DATA:
-            self.delineator.submit_data(packet_data)
+        while self.pending_data:
+
+            # Grab the first byte of our data, which should be our USB packet ID.
+            pid = self.pending_data[0]
+
+            # If this packet isn't a valid PID, it doesn't start a USB packet. Skip it.
+            if not self.is_valid_pid(pid):
+                del self.pending_data[0]
+                continue
+
+            # Extract the last two bits of the PID, which tell us what category
+            # of packet this is.
+            pid_suffix = pid & 0b11
+
+            # If this is a TOKEN pid, we always have three bytes of data.
+            if pid_suffix == TOKEN_PID_SUFFIX:
+                if len(self.pending_data) < TOKEN_LENGTH:
+                    return
+
+                packet = self.pending_data[0:TOKEN_LENGTH]
+                del self.pending_data[0:TOKEN_LENGTH]
+
+                self.emit_packet(packet)
+
+            # If this is a handshake packet, we always have just the PID of data.
+            elif pid_suffix == HANDSHAKE_PID_SUFFIX:
+                del self.pending_data[0]
+                self.emit_packet([pid])
+
+
+            # If this is a handshake packet, we always have just the PID of data.
+            elif pid_suffix == SPECIAL_PID_SUFFIX:
+                del self.pending_data[0]
+                self.emit_packet([pid])
+
+
+            # If this is a DATA pid, we'll need to try various lengths to see if anything matches our framing format.
+            elif (pid_suffix == DATA_PID_SUFFIX) & (len(self.pending_data) >= 3):
+
+                # Try every currently possible packet length.
+                for length in range(3, 515):
+
+                    if length > len(self.pending_data):
+                        return
+
+                    # Extract the payload of the given packet, and compute its CRC.
+                    payload = bytes(self.pending_data[1:length-2])
+                    payload_crc = self.data_crc(payload)
+
+                    # Read the end of the theoretical packet, and parse it as a CRC.
+                    packet_crc = self.pending_data[length-2] | (self.pending_data[length-1] << 8)
+
+                    # If they match, odds are this is the end of the data packet.
+                    if payload_crc == packet_crc:
+                        packet = self.pending_data[0:length]
+                        del self.pending_data[0:length]
+
+                        self.emit_packet(packet)
+
+
+    def emit_packet(self, data):
+        """ Submits a given packet to our output driver for processing. """
+
+        # FIXME: call a user-provided callback, or several?
+        PIDS = {
+            0b0001: 'OUT',
+            0b1001: 'IN',
+            0b0101: 'SOF',
+            0b1101: 'SETUP',
+
+            0b0011: 'DATA0',
+            0b1011: 'DATA1',
+            0b0111: 'DATA2',
+            0b1111: 'MDATA',
+
+            0b0010: 'ACK',
+            0b1010: 'NAK',
+            0b1110: 'STALL',
+            0b0110: 'NYET',
+
+            0b1100: 'PRE',
+            0b0100: 'ERR',
+            0b1000: 'SPLIT',
+            0b0100: 'PING',
+        }
+
+        pid = data[0] & 0x0f
+
+        # Skip SOFs.
+        if pid == 0b0101:
+            return
+
+        if pid in PIDS:
+            print("{} PACKET: {}".format(PIDS[pid], ["{:02x}".format(byte) for byte in data]))
+        else:
+            print("UNKNOWN PACKET: {}".format(["{:02x}".format(byte) for byte in data]))
 
 
 
@@ -289,10 +434,11 @@ def read_rhododendron_m0_loadable():
     with open(filename, 'rb') as f:
         return f.read()
 
+
 def main():
 
     # Create a new delineator to chunk the received data into packets.
-    delineator     = USBDelineator()
+    delineator     = USBHackDelineator()
 
     # Set up our argument parser.
     parser = GreatFETArgumentParser(description="Simple Rhododendron capture utility for GreatFET.", verbose_by_default=True)
@@ -368,13 +514,13 @@ def main():
 
         while True:
 
-            try:
-                new_delineation_bytes = device.comms.device.read(0x83, delineation_buffer, SAMPLE_DELIVERY_TIMEOUT_MS)
-                delineator.add_boundary_bytes(delineation_buffer[0:new_delineation_bytes])
+            #try:
+            #    new_delineation_bytes = device.comms.device.read(0x83, delineation_buffer, SAMPLE_DELIVERY_TIMEOUT_MS)
+            #    delineator.add_boundary_bytes(delineation_buffer[0:new_delineation_bytes])
 
-            except usb.core.USBError as e:
-                if e.errno != errno.ETIMEDOUT:
-                    raise
+            #except usb.core.USBError as e:
+            #    if e.errno != errno.ETIMEDOUT:
+            #        raise
 
             # Capture data from the device, and unpack it.
             try:
