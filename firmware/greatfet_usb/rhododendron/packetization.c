@@ -12,6 +12,8 @@
 #include <drivers/platform_clock.h>
 #include <drivers/platform_config.h>
 
+// XXX: HACK:
+#define LIBOPENCM3_VECTOR_H
 #include <drivers/usb/usb.h>
 #include <drivers/usb/usb_queue.h>
 
@@ -156,9 +158,20 @@ static void configure_events(void)
 {
 	// This mask represents all of the states that are equivalent to "state 0" in our FSM.
 	// It can be shifted to the left once to get the mirrors of state 1, or twice to get the mirrors of state 2.
-	const unsigned state_mirror_mask =
-			(1 <<  0) | (1 <<  5) | (1 << 10) | (1 << 15) |
-			(1 << 20) | (1 << 25);
+	unsigned state_mirror_mask = 0;
+	unsigned max_state = 5;
+
+	if ((max_state * max_state) >= (sizeof(state_mirror_mask) * 8)) {
+		pr_error("Proposed state_mirror_mask with max_state %d cannot fit!\n", max_state);
+	}
+
+	for (unsigned i = 0; i <= max_state; ++i) {
+		state_mirror_mask |= (1 << (i * max_state));
+	}
+
+	/*const unsigned state_mirror_mask =*/
+			/*(1 <<  0) | (1 <<  5) | (1 << 10) | (1 << 15) |*/
+			/*(1 << 20) | (1 << 25);*/
 
 	unsigned state, capture_register;
 
@@ -205,7 +218,7 @@ static void configure_events(void)
 		// Configure each of theses events to trigger a capture, and trigger each capture register
 		// to capture on their relevant event.
 		reg->use_register_for_capture.all            |= (1 << capture_register);
-		reg->capture_on_events[capture_register].all =  (1 << event);
+		reg->capture_on_events[capture_register].all  = (1 << event);
 
 		// Move to configuring the next mirror of state '2'...
 		state += 5;
@@ -283,7 +296,6 @@ static void packetization_isr(void)
 			(void *)&delineation_data[position_to_send],
 			half_buffer_size, 0, 0);
 	}
-
 }
 
 /**
@@ -346,7 +358,7 @@ void rhododendron_stop_packetization(void)
 	pr_info("Packetization terminated with count %u in state %u.\n", reg->count, reg->state);
 
 	for (unsigned i=0; i < ARRAY_SIZE(delineation_data); ++i) {
-		pr_info("delineator[%u] = %u\n", i, delineation_data[i]);
+		/*pr_info("delineator[%u] = %u\n", i, delineation_data[i]);*/
 	}
 }
 
